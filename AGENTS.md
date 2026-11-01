@@ -27,6 +27,10 @@
   servidor. Não transmitir dados ocultos só para escondê-los no cliente.
 - Pelo menos dez toques simultâneos; escala interna compartilhada para tokens
   e terrenos. Não usar zoom do navegador nem assumir resolução CSS fixa.
+- Token base máximo de 64 pixels CSS com indicadores internos; folga de 8 px
+  por lado; célula com 80 px entre lados opostos. Multiplicar tudo pela escala.
+- Admin local sem login/token por decisão do projeto. Manter container opcional,
+  bind local por padrão e documentar que a API também fica acessível na LAN.
 - Módulos com sete hexágonos e rotações de 60°. Validar encaixes e possibilidade
   de completar os objetivos.
 - Centralizar bloqueio de ação enquanto o próprio token estiver pressionado;
@@ -50,7 +54,16 @@
   banco quando envolvidas. Multitoque e fluidez exigem validação no tablet real.
 - Rode os comandos existentes mais específicos que cubram a mudança; documente
   comandos reais quando forem criados, sem afirmar validações não executadas.
-- Nesta fase, ainda não existem comandos de build/testes/execução estabelecidos.
+- Comandos: `npm ci`, `npm run build`, `npm run typecheck` e `npm test`.
+  Verificações com Docker, desenvolvimento local e operação estão no README.
+- Use `npm run check:stack` com serviços ativos e o perfil `test` do Compose
+  para integração em PostgreSQL isolado; nunca use o banco da partida para
+  testes de integração.
+- `check:lifecycle` recria o PostgreSQL, para o admin e reinicia o servidor;
+  só executar sem partida em andamento. Preservar o volume de dados.
+- Migrações SQL já aplicadas não devem ser editadas. Novas mudanças de schema
+  ou conteúdo inicial exigem nova migração; schemas Zod validam dados em runtime.
+- Não expor `.env`, tokens ou saída de configuração expandida nos logs/respostas.
 - Não adicionar dependências ou infraestrutura para uma tarefa só documental.
 - Não criar novas instruções duplicadas ou arquivos de planejamento paralelos
   sem necessidade; mantenha o README como fonte única do progresso.

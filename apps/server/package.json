@@ -1,0 +1,27 @@
+{
+  "name": "@terror/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/index.js",
+    "dev": "node --watch --env-file=../../.env dist/index.js",
+    "watch": "tsc -p tsconfig.json --watch",
+    "test": "node --test dist/test/unit.test.js",
+    "test:integration": "node --test dist/test/integration.test.js"
+  },
+  "dependencies": {
+    "@terror/contracts": "0.1.0",
+    "express": "^5.1.0",
+    "pg": "^8.16.0",
+    "socket.io": "^4.8.1",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/pg": "^8.15.0",
+    "socket.io-client": "^4.8.1"
+  }
+}

@@ -1,0 +1,24 @@
+import { z } from "zod";
+
+const secretSchema = z.string().min(32).refine(
+  (value) => !value.startsWith("replace-with-"),
+  "Generate a random secret; example placeholders cannot be used.",
+);
+
+const configSchema = z.object({
+  POSTGRES_HOST: z.string().min(1).default("postgres"),
+  POSTGRES_PORT: z.coerce.number().int().min(1).max(65535).default(5432),
+  POSTGRES_DB: z.string().min(1).default("terror"),
+  POSTGRES_USER: z.string().min(1).default("terror"),
+  POSTGRES_PASSWORD: secretSchema,
+  PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+});
+
+export function readConfig(environment: NodeJS.ProcessEnv) {
+  const result = configSchema.safeParse(environment);
+  if (!result.success) {
+    const issues = result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`);
+    throw new Error(`Invalid server configuration: ${issues.join("; ")}`);
+  }
+  return result.data;
+}

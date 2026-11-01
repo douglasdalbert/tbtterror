@@ -1,0 +1,104 @@
+name: terror
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: terror
+      POSTGRES_USER: terror
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run npm run setup:env first}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U terror -d terror"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  server:
+    build:
+      context: .
+      dockerfile: docker/server.Dockerfile
+      target: runtime
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: terror
+      POSTGRES_USER: terror
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run npm run setup:env first}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 6s
+      retries: 12
+    restart: unless-stopped
+
+  game:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      args:
+        APP: game
+    ports:
+      - "${GAME_PORT:-8080}:80"
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/api/health"]
+      interval: 5s
+      timeout: 6s
+      retries: 12
+    restart: unless-stopped
+
+  admin:
+    profiles: ["admin"]
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      args:
+        APP: admin
+    ports:
+      - "${ADMIN_BIND_ADDRESS:-127.0.0.1}:${ADMIN_PORT:-8081}:80"
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/api/health"]
+      interval: 5s
+      timeout: 6s
+      retries: 12
+    restart: "no"
+
+  integration:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: docker/server.Dockerfile
+      target: integration
+    environment:
+      TEST_DATABASE_URL: postgresql://terror:${POSTGRES_PASSWORD:?Run npm run setup:env first}@postgres-test:5432/terror_test
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+
+  postgres-test:
+    profiles: ["test"]
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: terror_test
+      POSTGRES_USER: terror
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run npm run setup:env first}
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U terror -d terror_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres-data:

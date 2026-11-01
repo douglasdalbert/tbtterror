@@ -15,16 +15,19 @@ aqui prevalecem sobre alternativas antigas dessa proposta.
 - [x] Levantar a proposta de jogo.
 - [x] Escolher arquitetura, infraestrutura e geometria do mapa.
 - [x] Registrar requisitos, etapas e instruções para continuidade.
-- [ ] Implementar a base técnica.
+- [x] Implementar a base técnica (aceite no tablet real ainda pendente).
 - [ ] Validar multitoque, escala e movimento no tablet real.
 
-**Estado:** planejamento documentado; aplicação e infraestrutura ainda não
-implementadas. Nenhum comando de instalação ou execução foi validado.
+**Estado:** base técnica implementada e validada no notebook e no navegador:
+jogo React/Phaser, API/Socket.IO, PostgreSQL persistente e scaffold do admin
+separado, agora sem login. A prévia calcula vários terrenos a partir do token
+e permite ajustar a escala localmente. Ainda não há jogadores,
+movimento, partida ativa, pausa ou CRUDs de edição.
 
-**Próxima etapa:** etapa 1, base técnica. Preparar o workspace TypeScript,
-separar jogo/servidor/admin/contratos e criar o Docker Compose. Entregar primeiro
-uma conexão cliente-servidor verificável, persistência do PostgreSQL e ativação
-opcional do admin. Não começar pela IA ou pelos puzzles.
+**Próxima etapa:** etapa 2, mesa multitoque e calibração. Primeiro abrir o jogo
+no tablet pela LAN; implementar os oito setores, seleção básica, atribuição
+de ponteiros e escala compartilhada. Validar dez contatos simultâneos no
+hardware real antes de avançar para IA e puzzles.
 
 **Primeiro marco jogável:** entrada dos jogadores, calibração compartilhada,
 tokens com movimento simultâneo e obstáculos simples no tablet real.
@@ -56,7 +59,13 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
 - Serviços separados para jogo web, servidor, PostgreSQL e admin.
 - Admin em perfil opcional do Compose, iniciado apenas quando necessário.
 - Não é necessário um container para o futuro celular: ele é um cliente web.
-- Definir portas, imagens, ferramentas de build, ORM e versões na etapa 1.
+- Base escolhida: npm workspaces, Vite 7, React 19, Phaser 3, TypeScript 7,
+  Node.js 22, Express 5, Socket.IO 4 e Zod 4. Resoluções exatas no lockfile.
+- Imagens: Node 22 Bookworm slim, Nginx 1.28 Alpine e PostgreSQL 17 Alpine.
+- Banco acessado por `pg`, SQL parametrizado e migrações SQL transacionais;
+  nenhum ORM necessário nesta fase.
+- Jogo publicado na porta 8080; admin na 8081, limitado ao notebook por padrão.
+  API (3000) e PostgreSQL (5432) permanecem internos à rede Docker.
 - Não criar uma conexão do navegador diretamente com o PostgreSQL.
 - Configurações de infraestrutura e segredos ficam em variáveis de ambiente;
   conteúdo de personagens, monstros e regras fica no PostgreSQL.
@@ -91,6 +100,20 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
 - O multiplicador é compartilhado: quando alguém ajusta, todos os tokens e
   elementos do terreno ajustam proporcionalmente.
 - Trata-se da escala interna do jogo, não do zoom do navegador.
+- Diâmetro máximo inicial do token: **64 pixels CSS**, incluindo todos os
+  indicadores de status desenhados dentro da borda, sem aumentar sua dimensão.
+- Folga: **8 pixels CSS por lado**. Para escala `s`, token = `64s`, folga = `8s`,
+  distância entre lados opostos do hexágono = `80s`, raio até a ponta =
+  `80s / sqrt(3)` e altura = `160s / sqrt(3)` (aproximadamente `92,38s`).
+- Primeiro calcular a célula; depois encaixar componentes completos de sete
+  células na área útil. Nunca reduzir células automaticamente para caber mais.
+- A prévia usa um perímetro provisório de dois diâmetros de token em cada lado,
+  uma malha de componentes sem células sobrepostas e apenas componentes inteiros.
+  Os setores reais substituirão essa reserva na etapa 2.
+- A escala da prévia vai de 0,5× a 2×, sem recriar o canvas. Esse intervalo ainda
+  não é uma regra definitiva nem está sincronizado com o servidor.
+- Sobras são fundo do `body` com névoa decorativa, visto pelo canvas transparente.
+  Não são transitáveis e não substituem a névoa de visibilidade da etapa 5.
 - Calcular a área útil removendo os setores dos jogadores. Tokens, caminhos,
   portas e janelas devem manter dimensões compatíveis.
 - Tokens maiores implicam módulos maiores e potencialmente menos módulos;
@@ -100,8 +123,189 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
 - Impedir scroll, zoom e gestos nativos sobre a superfície de jogo, preservando
   entrada multitoque e a atribuição de cada ponteiro ao token correto.
 - A interface durante o jogo prioriza ícones, não leitura de menus.
+- Durante a preparação, prever dicas rolantes legíveis nas quatro orientações,
+  incluindo um ícone próprio/licenciado de walkie-talkie e a orientação de que
+  jogadores podem conversar entre si. Isso não exige chat de voz nesta etapa.
 
-### Início
+## Executar a base técnica
+
+### Estrutura
+
+```text
+apps/game/            React + canvas Phaser
+apps/server/          API, Socket.IO, estado em memória e migrações
+apps/admin/           painel React opcional
+packages/contracts/   schemas Zod e contratos TypeScript compartilhados
+docker/               imagens e proxy Nginx
+scripts/              preparação local e verificações reproduzíveis
+```
+
+Cada workspace tem seu próprio `tsconfig.json`; as regras comuns estão em
+`tsconfig.base.json`. O servidor compila ESM para Node; os clientes usam Vite.
+
+### Primeira execução em Docker
+
+Requisitos: Node.js >= 22.18, npm e Docker com Compose.
+
+```sh
+npm ci
+npm run setup:env
+docker compose up --build -d --wait
+```
+
+`setup:env` gera `.env` local com segredos aleatórios e permissões restritas,
+sem exibir valores ou sobrescrever um arquivo existente. O arquivo é ignorado
+por Git e pelo contexto Docker. Alternativamente, copiar `.env.example` para
+`.env` e substituir o placeholder da senha do PostgreSQL por um segredo de ao menos
+32 caracteres. Nunca versionar o arquivo real.
+
+- Jogo no notebook: `http://localhost:8080`.
+- Tablet: `http://<IP-LAN-do-notebook>:8080`, na mesma rede.
+- Saúde da aplicação: `http://<IP-LAN-do-notebook>:8080/api/health`.
+- Portas podem ser alteradas em `.env`; recriar os serviços para aplicá-las.
+- Se estiver usando WSL/Docker Desktop, o IP do WSL não necessariamente é o IP
+  acessível pelo tablet. Conferir encaminhamento de portas e firewall do Windows
+  para a porta do jogo. Não expor API ou banco diretamente.
+- Esta base usa HTTP apenas na LAN confiável; não publicar na internet.
+
+### Admin opcional
+
+```sh
+docker compose --profile admin up --build -d --wait admin
+# Depois de usar:
+docker compose --profile admin stop admin
+```
+
+Abrir `http://localhost:8081`, sem login, senha de painel ou token.
+O admin atual só consulta revisão e contagem do conteúdo pela API; formulários
+de edição pertencem à etapa 9. A senha do PostgreSQL continua necessária e
+permanece exclusivamente no servidor; ela não é um login do painel.
+
+`ADMIN_BIND_ADDRESS=127.0.0.1` limita o painel ao notebook. Alterar para acesso
+pela LAN somente de forma consciente. A API administrativa também pode ser
+acessada pelo proxy do jogo por qualquer pessoa na LAN; desligar o painel não
+desabilita suas rotas. Essa ausência de autenticação é uma decisão para uso
+local entre amigos; não publicar o sistema na internet.
+Desligar o container do admin não desliga jogo, API ou banco.
+
+### Banco e migrações
+
+- Volume: `terror_postgres-data`; não removê-lo para uma reinicialização comum.
+- O servidor aplica migrações de `apps/server/migrations/` antes de aceitar
+  conexões, em transação e com lock; migrações aplicadas não executam novamente.
+- Conteúdo inicial: um sobrevivente e um monstro de pesadelo, ambos placeholders
+  sem arte externa, além das constantes de geometria/entrada já decididas.
+- Definições são JSONB validadas por Zod; IDs e metadados de migração são
+  relacionais. Durações e regras ainda pendentes não foram inventadas.
+- Não editar migrações já aplicadas: adicionar uma nova migração numerada.
+- CRUDs futuros devem validar conteúdo e incrementar a revisão global na mesma
+  transação. O servidor atual carrega sua cópia ao iniciar o lobby; carregar
+  novamente ao iniciar cada nova partida será implementado com o ciclo de jogo.
+- `docker compose restart server` descarta o lobby em memória e carrega o
+  conteúdo persistido, com nova identidade. Não existe salvamento de partida.
+- Não trocar a senha em `.env` esperando alterar a senha de um banco já
+  inicializado; a rotação exige alterar também o usuário PostgreSQL.
+
+### Desenvolvimento fora dos containers de aplicação
+
+O fluxo Docker acima é o caminho padrão. Para Vite/HMR e depuração local:
+
+É necessário publicar explicitamente o banco para o host antes de iniciar o
+servidor local. Criar `compose.local.yaml` (ignorado pelo Git) com:
+
+```yaml
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:5433:5432"
+```
+
+A porta fica limitada ao host; não publicar o PostgreSQL na LAN.
+
+```sh
+docker compose --profile admin stop admin server game
+docker compose -f compose.yaml -f compose.local.yaml up -d --wait postgres
+npm run build
+POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=5433 npm run dev:server
+# Em outros terminais:
+npm run watch -w @terror/server
+npm run dev:game
+# Opcional:
+npm run dev:admin
+```
+
+Vite: jogo na 5173, admin na 5174; ambos fazem proxy `/api` para o servidor
+local na 3000, e o jogo também faz proxy do Socket.IO. `dev:server` observa os
+arquivos compilados; `watch` recompila ao editar TypeScript. Se editar contratos,
+usar também `npm run watch -w @terror/contracts`.
+
+Para voltar ao fluxo padrão, remover a publicação local do banco recriando-o
+com o Compose base, preservando o volume, e subir novamente os serviços.
+Encerrar primeiro os processos locais de desenvolvimento:
+
+```sh
+docker compose up -d --force-recreate --wait postgres
+docker compose up --build -d --wait server game
+```
+
+Esse fluxo alternativo está documentado, mas o smoke test desta entrega usou
+os containers de aplicação, não servidores locais com HMR.
+
+### Verificações
+
+```sh
+npm run build
+npm run typecheck
+npm test
+npm run check:stack
+# Com admin ligado:
+CHECK_ADMIN=1 npm run check:stack
+# Banco isolado e temporário para integração:
+docker compose --profile test run --build --rm integration
+docker compose --profile test stop postgres-test
+docker compose --profile test rm -f postgres-test
+```
+
+`npm test` não exige PostgreSQL. A integração usa um banco de teste com tmpfs,
+não o volume da partida; verifica API, admin sem login, migrações idempotentes,
+cópia de configurações e WebSocket com reconexão. A execução local alternativa,
+`npm run test:integration`, exige `TEST_DATABASE_URL` de um banco dedicado.
+
+```sh
+# Somente sem partida em andamento: altera o ciclo de vida dos serviços!
+npm run check:lifecycle
+```
+
+Essa verificação cria e remove um registro de teste próprio, recria o container
+PostgreSQL preservando o volume, para o admin e reinicia o servidor. Confirma
+persistência dos dados, independência do admin e descarte do estado em memória.
+Ao terminar, o admin fica parado. Não usar durante uma partida.
+
+Para inspeção operacional:
+
+```sh
+docker compose ps
+docker compose logs --tail=50 server
+docker compose stop
+```
+
+### Resultados e limitações da etapa 1
+
+- Build dos quatro workspaces, typecheck e dez testes unitários passaram.
+- Uma integração com PostgreSQL real e isolado passou.
+- Serviços Docker com healthchecks validados; HTTP funciona pelo localhost e
+  pela interface de rede do notebook.
+- WebSocket real através do Nginx, solicitação de estado e reconexão verificados.
+- Recriação real do PostgreSQL preservou um registro de teste; reinício do
+  servidor gerou novo lobby; desligar admin manteve jogo e servidor.
+- Navegador integrado: canvas Phaser e estado conectado verificados.
+  Admin sem autenticação verificado por API e integração.
+- O bundle inicial inclui Phaser e recebe aviso de tamanho do Vite; Nginx usa
+  gzip e cache para assets versionados. Fluidez e custo real no tablet ainda
+  não foram medidos; não declarar metas de FPS/latência como atingidas.
+- Acesso pelo tablet físico, fullscreen, áudio e dez toques ainda não validados.
+
+## Início da partida
 
 - Todos os participantes ativos prontos iniciam uma contagem de 10 segundos.
 - Exibir a contagem em seus setores; setores vazios ficam invisíveis nessa fase.
@@ -116,7 +320,21 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
 
 ## Mapa procedural modular
 
-- Módulos de sete células hexagonais: uma central e seis ao redor.
+- Um componente de terreno (módulo) contém sete células hexagonais: uma central
+  e seis ao redor. O mapa inteiro reúne vários desses componentes, não apenas
+  sete células. A prévia da base técnica mostra somente um componente.
+- Cada célula possui tipagem e capacidades próprias. Prever ao menos:
+  - caminho: célula onde o personagem pode pisar/transitar;
+  - célula com ações próprias: interação definida pelo terreno/objetivo;
+  - célula receptora de objetos: permite colocar itens associados a outros
+    terrenos/objetivos, como isqueiro, espelho/quadro M ou ossos.
+- Todo componente deve ter pelo menos uma célula de caminho. A montagem também
+  precisa garantir caminhos conectados entre componentes.
+- Não assumir que ação e objeto impedem trânsito: definir transitabilidade,
+  ações e pontos de objetos separadamente conforme as capacidades da célula.
+- Definição autorada do componente, instância posicionada/rotacionada no mapa,
+  célula interna e objeto colocado são conceitos distintos. Objetos podem ser
+  distribuídos em células receptoras de outros componentes no início da partida.
 - Rotações permitidas: 0°, 60°, 120°, 180°, 240° e 300°.
   A ideia original de rotações de 90° foi substituída.
 - Módulos autorados com conexões de borda compatíveis e tipos de terreno.
@@ -144,7 +362,8 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
   precisam ser esclarecidas antes de implementar o balanceamento.
 - Força também influencia a representação de altura do personagem, sem romper
   a calibração compartilhada do token circular.
-- Indicadores ao redor do token mostram níveis exigidos e utilizados.
+- Indicadores na borda interna do token mostram níveis exigidos e utilizados,
+  sempre dentro do diâmetro máximo calibrado.
 - O arrasto mede a velocidade solicitada pelo dedo. Ao exceder a permitida,
   o token fica para trás/parado enquanto a solicitação permanecer acima do
   limite; não simplesmente acelerar o token para alcançar o dedo.
@@ -251,24 +470,26 @@ Usar placeholders próprios ou assets com licença verificada no protótipo.
 As etapas seguem a ordem abaixo. Não considerar uma etapa concluída apenas
 porque o código compila: verificar a experiência ou regra correspondente.
 
-### 1. Base técnica — próxima
+### 1. Base técnica — entregue; aceite no tablet pendente
 
-- [ ] Workspace TypeScript com jogo, servidor, admin e contratos compartilhados.
-- [ ] Docker Compose `terror`: serviços separados e admin opcional.
-- [ ] PostgreSQL persistente, migrações e conteúdo mínimo de desenvolvimento.
-- [ ] API validada, conexão Socket.IO e estado de partida em memória.
-- [ ] Comandos reais de desenvolvimento, build, testes e execução documentados.
+- [x] Workspace TypeScript com jogo, servidor, admin e contratos compartilhados.
+- [x] Docker Compose `terror`: serviços separados e admin opcional.
+- [x] PostgreSQL persistente, migrações e conteúdo mínimo de desenvolvimento.
+- [x] API validada, conexão Socket.IO e lobby em memória.
+- [x] Comandos de build, testes e execução documentados e validados.
+- [ ] Completar aceite de acesso pela LAN no tablet real.
 
 **Aceite:** tablet alcança o cliente/servidor pela LAN; saúde dos serviços
 verificada; dado de teste persiste após recriar o container; admin pode ser
 desligado sem interromper jogo/servidor.
 
-### 2. Mesa multitoque e calibração
+### 2. Mesa multitoque e calibração — próxima
 
 - [ ] Oito setores, entrada, seleção básica e círculo com borda de indicadores.
 - [ ] Fullscreen, áudio autorizado e tratamento de cancelamento de ponteiros.
 - [ ] Escala compartilhada e cálculo da área útil, inclusive em resize.
 - [ ] Arrasto simultâneo com identificação independente de ponteiros.
+- [ ] Dicas de preparação nas quatro orientações, incluindo walkie-talkie.
 
 **Aceite:** pelo menos dez contatos simultâneos no dispositivo real, incluindo
 tokens e controles, sem roubar gestos; ajustar um círculo escala todos; não há
@@ -286,7 +507,9 @@ reiniciar o servidor não restaura a partida anterior.
 
 ### 4. Tabuleiro modular
 
-- [ ] Módulos de sete hexágonos com seis rotações e conectores compatíveis.
+- [ ] Componentes de terreno de sete hexágonos tipados, com ao menos um caminho,
+  ações e células receptoras de objetos.
+- [ ] Mapa com vários componentes, seis rotações e conectores compatíveis.
 - [ ] Geração dimensionada pela área útil e pelo multiplicador do token.
 - [ ] Validação de objetivos alcançáveis e dependências de itens/atributos.
 - [ ] Geração reproduzível por seed para diagnóstico e testes.
@@ -336,7 +559,7 @@ e itens permitem concluir cada objetivo habilitado.
 - [ ] CRUDs de personagens, monstros, itens, terrenos/módulos e configurações.
 - [ ] Validação de referências, requisitos, durações e conteúdo incompleto.
 - [ ] Edição de conexões de módulos; avaliar necessidade de editor visual.
-- [ ] Controle de acesso administrativo e tratamento explícito de erros.
+- [ ] CRUD local sem autenticação, com tratamento explícito de erros.
 
 **Aceite:** editar conteúdo pela API sem acesso direto ao banco; partida em
 curso preserva suas configurações; a seguinte usa o conteúdo atualizado.
@@ -361,13 +584,15 @@ sem duplicar controladores ou expor informações ocultas.
 - Política de desconexão, pausa, desistência e alterações de participantes.
 - Regras exatas da fuga e requisitos de combustível.
 - Assets próprios/licenciados e identidade visual do primeiro monstro.
-- Portas LAN, acesso administrativo e ferramentas da base técnica.
+- Validação do acesso LAN no tablet, inclusive firewall/encaminhamento se WSL.
 
 ## Registro de progresso
 
 | Data | Entrega | Verificação |
 |---|---|---|
 | 2026-10-31 | Arquitetura, requisitos e etapas consolidados; instruções para agentes criadas. | Revisão documental frente à proposta e às decisões da conversa; sem código executável nesta entrega. |
+| 2026-10-31 | Base técnica: quatro workspaces, Compose, migração/conteúdo mínimo, API/Socket.IO e admin opcional. | Build/typecheck, sete testes unitários, uma integração PostgreSQL, verificação HTTP/WebSocket, ciclo de vida do volume/admin/servidor e canvas no navegador. Tablet físico ainda pendente. |
+| 2026-10-31 | Token máximo 64 px, folga 8 px por lado, indicadores internos, prévia de vários terrenos proporcional e admin sem login. | Build/typecheck e dez testes unitários, incluindo encaixe sem sobreposição, contenção de células e redução de capacidade ao aumentar a escala. Calibração compartilhada e setores reais ainda pendentes. |
 
 Adicionar novas linhas com entregas reais e evidências de validação. Não listar
 como concluídos comportamentos ainda apenas planejados.

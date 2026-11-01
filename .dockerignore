@@ -1,0 +1,9 @@
+.git
+node_modules
+**/node_modules
+**/dist
+.env
+.env.*
+coverage
+*.tsbuildinfo
+compose.local.yaml
