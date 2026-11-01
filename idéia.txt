@@ -40,3 +40,9 @@ O jogo funciona da seguinte forma:
 * Vamos começar simples e fazer de um jeito que o carro possa ser dirigido por qualquer pessoa (independente da inteligência, mas deixe comentado par amudar isso no futuro) que tenha o galão de combustível.
 * Ter algum puzzle local demorado (um hexagono que só poderia ser usado qnd o Freddy Kruegger fosse o monstro) onde o jogador não tenha mais medo do FK (Freddy Kruegger) ; foi assim q ele foi derrotado no primeiro filme. Algo como encontrar 4 espelhos com as letras M E D O e colocar em um dos hexagonos. (Obs: teremos hexagonos que são auxiliares, para caminho e afins, e neles colocaríamos objetos de outros hexagonos; neste caso, 4 hexagonos aleatórios teriam os espelhos e as pessoas teriam que pegar onde está e colocar lá na sala)
 * Levar os ossos (item do mapa) do FK para uma igreja e queimá-los (então precisaria achar isqueiro)
+
+
+
+
+- Na tela inicial, enquanto o jogador está preenchendo, para as 4 direções iremos mostrar textos de ajuda que vão rolando;
+* Todos vocês possuem walktalkie e podem conversar entre si (começando com uma imagem de walktalkie)
