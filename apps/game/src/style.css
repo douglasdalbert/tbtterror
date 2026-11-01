@@ -106,8 +106,8 @@ body {
 }
 .preparation-tip--top { bottom: calc(100% + 8px); transform: rotate(180deg); }
 .preparation-tip--bottom { top: calc(100% + 8px); }
-.preparation-tip--left { top: 50%; left: -38px; transform: translate(-50%, -50%) rotate(-90deg); }
-.preparation-tip--right { top: 50%; right: -38px; transform: translate(50%, -50%) rotate(90deg); }
+.preparation-tip--left { top: 50%; left: -38px; transform: translate(-50%, -50%) rotate(90deg); }
+.preparation-tip--right { top: 50%; right: -38px; transform: translate(50%, -50%) rotate(270deg); }
 .walkie-icon { width: 20px; height: 20px; flex: 0 0 20px; fill: none; stroke: #91d8f0; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .preparation-center {
   position: absolute;

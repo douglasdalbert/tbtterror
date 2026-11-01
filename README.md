@@ -35,6 +35,8 @@ todos os tokens no tablet. O bloqueio dos controles durante o arrasto foi
 corrigido no cliente e aguarda novo teste físico.
 Os tokens dos setores 5 e 7 começam diante de seus próprios setores; os setores
 laterais 4 e 8 foram girados em mais 180° para leitura por quem está fora da mesa.
+As duas dicas verticais externas à central também receberam mais 180°,
+acompanhando a orientação de leitura dos setores laterais.
 
 **Próxima etapa:** concluir o aceite da etapa 2 no tablet pela LAN: confirmar
 dez contatos simultâneos entre tokens e controles, agora com abas e controles
@@ -670,6 +672,8 @@ sem duplicar controladores ou expor informações ocultas.
 | 2026-11-01 | Usuário confirmou LAN, calibração compartilhada e arrasto de todos os tokens; relatou controles bloqueados durante arrasto. Setores reorganizados em abas de token/personagem, sem seletor nativo, com botão multitoque reutilizável. | Typecheck, 11 testes unitários, build local/Docker do jogo e `check:stack` passaram. Chromium/CDP confirmou oito tokens + dois controles, +/−, abas, continuidade do arrasto, toque sem duplicação, cancelamento, mouse e teclado. Somente o container game foi atualizado; reteste físico pendente no mesmo endereço/QR. |
 | 2026-11-01 | Atributos base 1/1/1 e três pontos distribuíveis; velocidade renomeada para destreza nos contratos, variáveis e indicadores; migração 002 preserva níveis do conteúdo existente. Quatro dicas externas à central e menor reserva dos setores liberam mapa. | `npm run typecheck`, `npm test` (9 contratos + 3 servidor), `npm run build`, integração em PostgreSQL isolado pelo perfil `test` e `npm run check:stack` passaram. Servidor/jogo publicados com volume preservado. Navegador confirmou distribuição 3/2/1, reembolso para 2/2/2, independência entre setores, oito tokens + dois controles de atributos e continuidade do arrasto. Disputa simultânea pelo último ponto respeitou o orçamento. Em 1920×1200 CSS/escala 2 e 960×600 CSS/escala 1, controles e dicas não cortam nem sobrepõem os setores/central; ajuste lateral republicado. Aceite físico dos novos controles ainda pendente. |
 | 2026-11-01 | Corrigida a inversão dos tokens iniciais dos setores 5/7 e acrescentados 180° à orientação dos setores 4/8. | `npm run build -w @terror/game` e publicação somente do jogo passaram. Navegador em 1920×1200 confirmou os centros renderizados dos tokens 5/7 em x≈475/1445, respectivamente, e as matrizes CSS de rotação dos setores laterais. Reteste físico pendente; próxima etapa continua sendo o aceite da mesa. |
+
+| 2026-11-01 | Dicas verticais da central giradas em +180°, sem mudar posições ou dicas horizontais. | Build do jogo e publicação somente de `game` passaram; navegador confirmou as matrizes CSS de 90° à esquerda e 270° à direita. Reteste físico pendente; próxima etapa permanece o aceite da mesa. |
 
 Adicionar novas linhas com entregas reais e evidências de validação. Não listar
 como concluídos comportamentos ainda apenas planejados.
