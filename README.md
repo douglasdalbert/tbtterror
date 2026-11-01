@@ -43,12 +43,14 @@ O indicador mantém nome acessível; detalhes de erros continuam explícitos.
 A revisão de conteúdo não aparece na central. O resumo de prévia só aparece
 fora de produção. O botão de áudio/tela cheia é uma sobreposição central acima
 da interface, independente da conexão; desaparece apenas com áudio em execução
-e tela cheia ativa, reaparecendo se qualquer um deixar de estar ativo.
+e tela cheia ativa, reaparecendo se qualquer um deixar de estar ativo. A
+instrução textual sobre arrastar e calibrar foi removida da preparação.
 
 **Próxima etapa:** concluir o aceite da etapa 2 no tablet pela LAN: confirmar
 dez contatos simultâneos entre tokens e controles, agora com abas e controles
 por ponteiro, sem scroll/zoom involuntário, fullscreen, áudio e cancelamento.
-Só depois avançar para início da partida e pausa.
+A interface permanece sem a instrução textual de arrasto; só depois do aceite
+físico avançar para início da partida e pausa.
 
 **Primeiro marco jogável:** entrada dos jogadores, calibração compartilhada,
 tokens com movimento simultâneo e obstáculos simples no tablet real.
@@ -582,6 +584,7 @@ desligado sem interromper jogo/servidor.
   contador individual e atualização dos indicadores F/D/I.
 - [x] Quatro dicas externas à central e setores compactos; atributos laterais
   organizados em linhas nas telas de menor altura para não cortar controles.
+- [x] Remover a instrução textual de arrasto/calibração da preparação.
 
 **Aceite:** pelo menos dez contatos simultâneos no dispositivo real, incluindo
 tokens e controles, sem roubar gestos; ajustar um círculo escala todos; não há
@@ -705,6 +708,7 @@ sem duplicar controladores ou expor informações ocultas.
 
 | 2026-11-01 | Texto de status da conexão substituído por indicador circular verde/amarelo/vermelho no cabeçalho central, com nome acessível e feedback de erro preservado. | Build do jogo e publicação somente de `game` passaram. Navegador confirmou conexão pendente (amarelo), falha simulada com alerta (vermelho) e recuperação (verde), sem texto visível no indicador. Próxima etapa permanece o aceite físico da mesa. |
 | 2026-11-01 | Revisão removida da central; `NODE_ENV` ligado ao servidor/build do jogo e resumo de prévia restrito a não produção. Áudio/tela cheia em sobreposição central, visível somente enquanto algum deles não está ativo, com acompanhamento de mudanças do áudio. | Typecheck, build local e builds Docker nos dois ambientes passaram. Navegador confirmou presença/ausência da prévia em development/production, botão central acima da interface mesmo com conexão em erro e ocultação/reaparecimento com APIs simuladas de áudio/tela cheia. Teste nativo não concluiu na página compartilhada oculta; reteste físico pendente. Ambiente development restaurado, volume preservado e `check:stack` aprovado; próxima etapa permanece o aceite da mesa. |
+| 2026-11-01 | Instrução textual de arrasto e calibração removida da preparação para reduzir texto na interface do jogo. | Validado build de `@terror/game` e busca confirmando que a frase não permanece no código. Próxima etapa continua sendo o aceite físico da mesa. |
 
 Adicionar novas linhas com entregas reais e evidências de validação. Não listar
 como concluídos comportamentos ainda apenas planejados.

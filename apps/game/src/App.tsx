@@ -192,7 +192,6 @@ export function App() {
           {snapshot && catalog && (
             <p>Preparação · {Object.keys(selections).length}/8 jogadores</p>
           )}
-          <p className="note">Arraste seu token. A calibração de qualquer setor ajusta todos.</p>
           {!isProduction && layout && <p className="note preview-summary">Prévia · {layout.terrains} terrenos · token {Math.round(layout.tokenDiameter)} px</p>}
           {layout?.terrains === 0 && <p role="alert" className="error">Não cabe um terreno completo nesta escala.</p>}
           {selectionState.error && <p role="alert" className="error">{selectionState.error}</p>}
