@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from "react";
-import { availableAttributePoints, rotatePlayerName, type Attributes, type AttributeName } from "@terror/contracts";
+import { availableAttributePoints, rotatePlayerName, type Attributes, type AttributeName, type MatchSnapshot } from "@terror/contracts";
 import { TouchButton } from "./TouchButton.js";
 import { AttributeIcon, TabIcon } from "./Icons.js";
 import { LetterWheel } from "./LetterWheel.js";
@@ -65,23 +65,40 @@ const tabs = [
 type Tab = typeof tabs[number]["tab"];
 type Dialog = "join" | "leave" | AttributeName | null;
 
-export function PlayerSector({ slot, name, attributes, error, canEnter, scale, onEnter, onLeave, onClearError, onAttribute, onScale }: {
+export function PlayerSector({ slot, name, attributes, error, canEnter, scale, phase, ready, resumeReady, moving, controllable, busy, onEnter, onLeave, onClearError, onAttribute, onScale, onReady, onPause, onResume }: {
   slot: number;
   name: string | undefined;
   attributes: Attributes | undefined;
   error: string;
   canEnter: boolean;
   scale: number;
+  phase: MatchSnapshot["phase"];
+  ready: boolean;
+  resumeReady: boolean;
+  moving: boolean;
+  controllable: boolean;
+  busy: boolean;
   onEnter: (name: string) => void;
   onLeave: () => void;
   onClearError: () => void;
   onAttribute: (attribute: AttributeName, delta: 1 | -1) => void;
-  onScale: (delta: number) => void;
+  onScale: (delta: -0.05 | 0.05) => void;
+  onReady: (value: boolean) => void;
+  onPause: () => void;
+  onResume: (value: boolean) => void;
 }) {
   const [activeTab, setActiveTab] = useState<Tab>("game");
   const [dialog, setDialog] = useState<Dialog>(null);
   const [draftName, setDraftName] = useState("AAA");
   const panelId = useId();
+  const locked = phase !== "lobby" && phase !== "countdown";
+  const shownTab = moving || locked ? "game" : activeTab;
+  useEffect(() => {
+    if (moving || locked) {
+      setActiveTab("game");
+      setDialog(null);
+    }
+  }, [moving, locked]);
   useEffect(() => {
     if (attributes && dialog === "join") {
       setDialog(null);
@@ -100,7 +117,7 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, o
   const availablePoints = attributes ? availableAttributePoints(attributes) : 3;
   const identity = name ?? `Setor ${slot + 1}`;
   const rotation = slot === 3 ? 270 : slot === 7 ? 90 : slot < 3 ? 180 : 0;
-  const visibleDialog = dialog === "join" && attributes ? null : dialog;
+  const visibleDialog = moving || (dialog === "join" && attributes) ? null : dialog;
   const closeDialog = () => {
     setDialog(null);
     onClearError();
@@ -109,26 +126,46 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, o
   return (
     <article className={className} aria-label={identity}>
       <div className="sector-card">
-        <div className="sector-layout" inert={visibleDialog !== null}>
+        <div className="sector-layout" inert={visibleDialog !== null || moving || !controllable}>
           {attributes ? (
             <>
               <nav className="sector-identity" aria-label={`Jogador ${identity}`}>
                 <strong className="player-name">{name}</strong>
                 <TouchButton className="leave-button" aria-label={`Sair ${identity}`}
+                  disabled={busy}
                   onPress={() => setDialog("leave")}><TabIcon tab="leave" /></TouchButton>
               </nav>
               <div id={`${panelId}-content`} className="player-setup" role="tabpanel"
-                aria-labelledby={`${panelId}-${activeTab}`}>
-                {activeTab === "token" && (
-                  <div className="calibration-controls">
-                    <TouchButton aria-label={`Diminuir escala compartilhada de ${identity}`}
-                      disabled={scale <= 0.5} onPress={() => onScale(-0.05)}>−</TouchButton>
-                    <CalibrationToken scale={scale} attributes={attributes} />
-                    <TouchButton aria-label={`Aumentar escala compartilhada de ${identity}`}
-                      disabled={scale >= 2} onPress={() => onScale(0.05)}>+</TouchButton>
+                aria-labelledby={`${panelId}-${shownTab}`}>
+                {shownTab === "game" && (
+                  <div className="game-controls">
+                    {(phase === "lobby" || phase === "countdown") && (
+                      <TouchButton role="checkbox" aria-checked={ready} className="ready-button"
+                        disabled={busy} onPress={() => onReady(!ready)}>
+                        <span aria-hidden="true">{ready ? "☑" : "☐"}</span> Estou pronto
+                      </TouchButton>
+                    )}
+                    {(phase === "running" || phase === "chapter") && (
+                      <TouchButton className="ready-button" disabled={busy} onPress={onPause}>Pausar</TouchButton>
+                    )}
+                    {phase === "paused" && (
+                      <TouchButton role="checkbox" aria-checked={resumeReady} className="ready-button"
+                        disabled={busy} onPress={() => onResume(!resumeReady)}>
+                        <span aria-hidden="true">{resumeReady ? "☑" : "☐"}</span> Pronto para retomar
+                      </TouchButton>
+                    )}
                   </div>
                 )}
-                {activeTab === "character" && (
+                {shownTab === "token" && (
+                  <div className="calibration-controls">
+                    <TouchButton aria-label={`Diminuir escala compartilhada de ${identity}`}
+                      disabled={busy || scale <= 0.5} onPress={() => onScale(-0.05)}>−</TouchButton>
+                    <CalibrationToken scale={scale} attributes={attributes} />
+                    <TouchButton aria-label={`Aumentar escala compartilhada de ${identity}`}
+                      disabled={busy || scale >= 2} onPress={() => onScale(0.05)}>+</TouchButton>
+                  </div>
+                )}
+                {shownTab === "character" && (
                   <div className="attribute-columns">
                     <output className="available-points" aria-live="polite"
                       aria-label={`Pontos disponíveis de ${identity}`}>+{availablePoints}</output>
@@ -140,9 +177,9 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, o
                           aria-label={`${label} de ${identity}`}>{attributes[attribute]}</output>
                         <div className="attribute-adjustments">
                           <TouchButton aria-label={`Diminuir ${label} de ${identity}`}
-                            disabled={attributes[attribute] <= 1} onPress={() => onAttribute(attribute, -1)}>−</TouchButton>
+                            disabled={busy || attributes[attribute] <= 1} onPress={() => onAttribute(attribute, -1)}>−</TouchButton>
                           <TouchButton aria-label={`Aumentar ${label} de ${identity}`}
-                            disabled={attributes[attribute] >= 3 || availablePoints === 0}
+                            disabled={busy || attributes[attribute] >= 3 || availablePoints === 0}
                             onPress={() => onAttribute(attribute, 1)}>+</TouchButton>
                         </div>
                       </div>
@@ -154,12 +191,14 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, o
                 aria-label={`Configuração de ${identity}`}>
                 {tabs.map(({ tab, label }) => (
                   <TouchButton key={tab} id={`${panelId}-${tab}`} role="tab"
-                    aria-label={label === "Personagem" && availablePoints > 0
+                    aria-label={!locked && label === "Personagem" && availablePoints > 0
                       ? `Personagem, ${availablePoints} pontos disponíveis` : label}
-                    alert={tab === "character" && availablePoints > 0}
-                    aria-selected={activeTab === tab} aria-controls={`${panelId}-content`}
-                    tabIndex={activeTab === tab ? 0 : -1}
+                    alert={!locked && tab === "character" && availablePoints > 0}
+                    disabled={locked && tab !== "game"}
+                    aria-selected={shownTab === tab} aria-controls={`${panelId}-content`}
+                    tabIndex={shownTab === tab ? 0 : -1}
                     onKeyDown={(event) => {
+                      if (locked) return;
                       if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
                       event.preventDefault();
                       const index = tabs.findIndex((item) => item.tab === tab);
@@ -198,7 +237,7 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, o
                     }} />
                 ))}
               </div>
-              <TouchButton className="confirm-join" disabled={!canEnter} onPress={() => onEnter(draftName)}>
+              <TouchButton className="confirm-join" disabled={busy || !canEnter} onPress={() => onEnter(draftName)}>
                 Entrar
               </TouchButton>
             </div>
@@ -208,7 +247,7 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, o
           <SectorDialog title="Quer sair?" onClose={closeDialog}>
             <div className="exit-confirmation">
               <TouchButton onPress={closeDialog}>Cancelar</TouchButton>
-              <TouchButton onPress={() => {
+              <TouchButton disabled={busy} onPress={() => {
                 setDialog(null);
                 setActiveTab("game");
                 onLeave();
@@ -223,6 +262,17 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, o
           </SectorDialog>
         )}
         {error && <p className="sector-error" role="alert">{error}</p>}
+        {moving && (
+          <div className="movement-overlay" role="status">
+            <svg className="walking-icon" viewBox="0 0 40 48" aria-hidden="true">
+              <circle cx="20" cy="7" r="5" />
+              <path d="M20 15v15" />
+              <path className="walking-arms" d="m20 17-10 9m10-9 10 9" />
+              <path className="walking-legs" d="m20 30-9 14m9-14 9 14" />
+            </svg>
+            <p>Não é possível executar ação enquanto em movimento.</p>
+          </div>
+        )}
       </div>
     </article>
   );

@@ -1,21 +1,18 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { io, type Socket } from "socket.io-client";
 import {
   catalogSchema,
   matchSnapshotSchema,
   parseApiResponse,
-  enterPreparationPlayer,
-  leavePreparationPlayer,
-  changePreparationAttribute,
+  commandResultSchema,
   playerSectorDepth,
-  type PreparationState,
-  type AttributeName,
+  type MatchCommand,
   type Catalog,
   type MatchSnapshot,
   type ClientToServerEvents,
   type ServerToClientEvents,
 } from "@terror/contracts";
-import { Board, type LayoutSummary } from "./Board.js";
+import { Board, type LayoutSummary, type BoardInteraction } from "./Board.js";
 import { PlayerSector } from "./PlayerSector.js";
 import { TouchButton } from "./TouchButton.js";
 import { PreparationTips } from "./PreparationTips.js";
@@ -30,12 +27,14 @@ export function App() {
   const [activationError, setActivationError] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
-  const [scale, setScale] = useState(1);
   const [layout, setLayout] = useState<LayoutSummary>();
-  const [selectionState, setSelectionState] = useState<PreparationState>({
-    players: {}, errors: {},
-  });
-  const selections = selectionState.players;
+  const [sectorErrors, setSectorErrors] = useState<Record<number, string>>({});
+  const [pressedSlots, setPressedSlots] = useState<Record<number, boolean>>({});
+  const [busySlots, setBusySlots] = useState<Record<number, boolean>>({});
+  const socketRef = useRef<Socket<ServerToClientEvents, ClientToServerEvents> | null>(null);
+  const catalogMatchId = useRef("");
+  const scale = snapshot?.arena.scale ?? 1;
+  const configuring = !snapshot || snapshot.phase === "lobby" || snapshot.phase === "countdown";
   const [hintIndex, setHintIndex] = useState(0);
   const audioContext = useRef<AudioContext | null>(null);
 
@@ -43,9 +42,18 @@ export function App() {
     const controller = new AbortController();
     const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io({
       autoConnect: false,
+      auth: { clientId: sessionStorage.getItem("terror-client-id") ?? (() => {
+        const id = crypto.randomUUID();
+        sessionStorage.setItem("terror-client-id", id);
+        return id;
+      })() },
     });
+    socketRef.current = socket;
     socket.on("connect", () => setConnection("connected"));
-    socket.on("disconnect", () => setConnection("connecting"));
+    socket.on("disconnect", () => {
+      setConnection("connecting");
+      setPressedSlots({});
+    });
     socket.on("connect_error", (failure) => {
       setConnection("error");
       setError(`Falha na conexão: ${failure.message}`);
@@ -57,6 +65,8 @@ export function App() {
         return;
       }
       setSnapshot(parsed.data);
+      if (catalogMatchId.current === parsed.data.id) return;
+      catalogMatchId.current = parsed.data.id;
       void fetch("/api/catalog", { signal: controller.signal })
         .then((response) => parseApiResponse(response, catalogSchema))
         .then((data) => {
@@ -65,6 +75,7 @@ export function App() {
         })
         .catch((failure: unknown) => {
           if (controller.signal.aborted) return;
+          catalogMatchId.current = "";
           setError(failure instanceof Error ? failure.message : "Falha ao carregar conteúdo.");
         });
     });
@@ -72,6 +83,7 @@ export function App() {
     return () => {
       controller.abort();
       socket.disconnect();
+      socketRef.current = null;
     };
   }, []);
 
@@ -128,43 +140,83 @@ export function App() {
     setActivationError(failures.join(" "));
   }
 
-  function changeScale(delta: number) {
-    setScale((current) => Math.min(2, Math.max(0.5, Math.round((current + delta) * 20) / 20)));
-  }
-
-  function changeAttribute(slot: number, attribute: AttributeName, delta: 1 | -1) {
-    setSelectionState((current) => changePreparationAttribute(current, slot, attribute, delta));
-  }
-
-  const previewPlayers = useMemo(() => Object.entries(selections).map(([slot, player]) => ({
-    slot: Number(slot), ...player,
-  })), [selections]);
+  const sendCommand = useCallback((command: MatchCommand) => {
+    const slot = "slot" in command ? command.slot : undefined;
+    const report = (message: string) => {
+      if (slot !== undefined) setSectorErrors((current) => ({ ...current, [slot]: message }));
+      else setError(message);
+    };
+    const socket = socketRef.current;
+    if (!socket?.connected) {
+      report("Sem conexão com o servidor. Aguarde a reconexão.");
+      return;
+    }
+    const action = !["press", "move", "release", "viewport"].includes(command.type);
+    const busyAction = ["join", "leave", "ready", "pause", "resume"].includes(command.type);
+    if (busyAction && slot !== undefined) setBusySlots((current) => ({ ...current, [slot]: true }));
+    void socket.timeout(3000).emitWithAck("match:command", command)
+      .then((reply) => {
+        const result = commandResultSchema.parse(reply);
+        if (!result.ok) {
+          report(result.error);
+          if (command.type === "press") setPressedSlots((current) => ({ ...current, [command.slot]: false }));
+        } else if (action && slot !== undefined) setSectorErrors((current) => ({ ...current, [slot]: "" }));
+      })
+      .catch((failure: unknown) => report(failure instanceof Error ? `Falha na ação: ${failure.message}` : "Falha na ação."))
+      .finally(() => {
+        if (busyAction && slot !== undefined) setBusySlots((current) => ({ ...current, [slot]: false }));
+      });
+  }, []);
+  const interaction = useMemo<BoardInteraction>(() => ({
+    onCommand: sendCommand,
+    onPressed: (slot, pressed) => setPressedSlots((current) => ({ ...current, [slot]: pressed })),
+  }), [sendCommand]);
+  useEffect(() => {
+    if (!snapshot || !configuring || connection !== "connected") return;
+    const update = () => sendCommand({ type: "viewport", width: Math.max(320, innerWidth), height: Math.max(320, innerHeight) });
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, [snapshot?.id, configuring, connection, sendCommand]);
+  const previewPlayers = snapshot?.players ?? [];
+  const boardSnapshot = useMemo(() => snapshot && connection !== "connected"
+    ? { ...snapshot, phase: "paused" as const } : snapshot, [snapshot, connection]);
 
   return (
     <main className="game" style={{ "--sector-depth": `${playerSectorDepth(scale)}px` } as CSSProperties}>
-      <Board scale={scale} players={previewPlayers} onLayout={setLayout} />
+      <Board scale={scale} players={previewPlayers} snapshot={boardSnapshot} interaction={interaction} onLayout={setLayout} />
       <section className="player-sectors" aria-label="Seleção dos jogadores">
-        {Array.from({ length: 8 }, (_, slot) => (
+        {Array.from({ length: 8 }, (_, slot) => {
+          const player = snapshot?.players.find((p) => p.slot === slot);
+          if (!player && !configuring) return null;
+          return (
           <PlayerSector
             key={slot}
             slot={slot}
-            attributes={selections[slot]?.attributes}
-            name={selections[slot]?.name}
-            error={selectionState.errors[slot] || ""}
-            canEnter={catalog !== undefined}
+            attributes={player?.attributes}
+            name={player?.name}
+            error={sectorErrors[slot] || ""}
+            canEnter={catalog !== undefined && connection === "connected" && configuring}
+            phase={snapshot?.phase ?? "lobby"}
+            ready={player?.ready ?? false}
+            resumeReady={player?.resumeReady ?? false}
+            moving={!!pressedSlots[slot] || (player?.pressed ?? false)}
+            controllable={!player || (snapshot?.controlSlots.includes(slot) ?? false)}
+            busy={!!busySlots[slot] || connection !== "connected"}
             scale={scale}
-            onEnter={(name) => setSelectionState((current) => enterPreparationPlayer(current, slot, name))}
-            onLeave={() => setSelectionState((current) => leavePreparationPlayer(current, slot))}
-            onClearError={() => setSelectionState((current) => ({
-              ...current, errors: { ...current.errors, [slot]: "" },
-            }))}
-            onAttribute={(attribute, delta) => changeAttribute(slot, attribute, delta)}
-            onScale={changeScale}
+            onEnter={(name) => sendCommand({ type: "join", slot, name })}
+            onLeave={() => sendCommand({ type: "leave", slot })}
+            onClearError={() => setSectorErrors((current) => ({ ...current, [slot]: "" }))}
+            onAttribute={(attribute, delta) => sendCommand({ type: "attribute", slot, attribute, delta })}
+            onScale={(delta) => sendCommand({ type: "scale", slot, delta })}
+            onReady={(value) => sendCommand({ type: "ready", slot, value })}
+            onPause={() => sendCommand({ type: "pause", slot })}
+            onResume={(value) => sendCommand({ type: "resume", slot, value })}
           />
-        ))}
+        ); })}
       </section>
       <div className="preparation-center">
-        <PreparationTips hintIndex={hintIndex} />
+        {configuring && <PreparationTips hintIndex={hintIndex} />}
         <section className="status" aria-live="polite">
           <div className="status-heading">
             <h1>Terror</h1>
@@ -176,9 +228,13 @@ export function App() {
             />
           </div>
           {error && <p role="alert" className="error">{error}</p>}
+          {snapshot?.error && <p role="alert" className="error">{snapshot.error}</p>}
           {snapshot && catalog && (
-            <p>Preparação · {Object.keys(selections).length}/8 jogadores</p>
+            <p>{configuring ? "Preparação" : snapshot.phase === "paused" ? "Pausado" : "Partida"} · {snapshot.players.length}/8 jogadores</p>
           )}
+          {snapshot?.phase === "countdown" && <output className="countdown" aria-label="Contagem para início">{Math.ceil(snapshot.remainingMs / 1000)}</output>}
+          {(snapshot?.phase === "chapter" || (snapshot?.phase === "paused" && snapshot.remainingMs > 0)) &&
+            <p className="chapter-title" style={{ opacity: Math.min(1, snapshot.remainingMs / 1000) }}>{snapshot.chapter}</p>}
           {!isProduction && layout && <p className="note preview-summary">Prévia · {layout.terrains} terrenos · token {Math.round(layout.tokenDiameter)} px</p>}
           {layout?.terrains === 0 && <p role="alert" className="error">Não cabe um terreno completo nesta escala.</p>}
         </section>

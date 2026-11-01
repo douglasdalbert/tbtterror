@@ -5,7 +5,7 @@ import {
   matchSnapshotSchema, parseApiResponse, playerAttributesSchema, settingsSchema,
   enterPreparationPlayer, leavePreparationPlayer, changePreparationAttribute, rotatePlayerName, type PreparationState,
 } from "./index.js";
-import { boardArea, cellDimensions, hexCorners, terrainLayout } from "./layout.js";
+import { boardArea, cellDimensions, hexCorners, terrainLayout, tokenHitCircle } from "./layout.js";
 
 test("attributes reject out-of-range values and unknown properties", () => {
   assert.equal(attributesSchema.safeParse({ strength: 0, dexterity: 2, wisdom: 2 }).success, false);
@@ -82,9 +82,21 @@ test("lobby snapshots cannot accidentally include hidden world data", () => {
     id: "8312cb65-50ae-4fb6-879c-071b1861bd22",
     phase: "lobby",
     catalogRevision: 1,
+    players: [], arena: { width: 1920, height: 1200, scale: 1 },
+    remainingMs: 0, simulationMs: 0, chapter: "", error: "", controlSlots: [],
   };
   assert.equal(matchSnapshotSchema.safeParse(snapshot).success, true);
   assert.equal(matchSnapshotSchema.safeParse({ ...snapshot, monsterPosition: [1, 2] }).success, false);
+});
+
+test("touch circles follow the actual token diameter through increasing and decreasing scales", () => {
+  for (const scale of [1, 2, 0.5, 1.5, 2, 1]) {
+    const diameter = 64 * scale;
+    const circle = tokenHitCircle(diameter);
+    assert.deepEqual(circle, { x: diameter / 2, y: diameter / 2, radius: diameter / 2 });
+    assert.ok(Math.hypot(diameter / 2 - circle.x, diameter / 2 - circle.y) <= circle.radius);
+  }
+  assert.throws(() => tokenHitCircle(0));
 });
 
 test("HTTP parsing surfaces server errors and rejects invalid successful responses", async () => {

@@ -58,7 +58,7 @@ body {
 .sector--error .sector-card { border-color: #ff4545; }
 .sector-layout { display: grid; grid-template-columns: 32px minmax(0, 1fr) 32px; align-items: center; gap: 4px; height: 100%; }
 .sector-layout:has(.join-area) { grid-template-columns: 1fr; }
-.sector-identity { display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100%; }
+.sector-identity { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; height: 100%; }
 .player-name { font-size: 11px; letter-spacing: 0.5px; padding-top: 5px; }
 .touch-button { position: relative; }
 .button-alert { position: absolute; top: -3px; right: -3px; width: 9px; height: 9px; border-radius: 50%; background: #ff4545; border: 1px solid #151d29; pointer-events: none; }
@@ -106,6 +106,21 @@ body {
 .letter-wheel-value { display: grid; place-items: center; height: 28px; font-size: 24px; font-weight: 800; touch-action: none; border-radius: 4px; background: #0c131d; }
 .exit-confirmation { display: flex; align-items: center; justify-content: center; gap: 12px; height: 100%; }
 .sector-error { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.game-controls { display: grid; place-items: center; width: 100%; }
+.ready-button { max-width: 100%; font-size: 13px !important; }
+.ready-button[aria-checked="true"] { color: #4ade80; border-color: #4ade80; }
+.movement-overlay { position: absolute; inset: 0; z-index: 3; background: #151d29f5; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px; border-radius: inherit; }
+.movement-overlay p { font-size: 12px; max-width: 210px; margin: 0; }
+.walking-icon { width: 34px; height: 44px; flex: 0 0 34px; fill: none; stroke: #75d9f4; stroke-width: 3; stroke-linecap: round; }
+.walking-arms, .walking-legs { transform-origin: 20px 25px; animation: walking-step 0.5s ease-in-out infinite alternate; }
+.walking-arms { animation-direction: alternate-reverse; }
+@keyframes walking-step { from { transform: rotate(-16deg); } to { transform: rotate(16deg); } }
+.countdown { display: block; color: #75d9f4; font-size: 64px; font-weight: 800; }
+.chapter-title { font-size: 24px; font-weight: 700; transition: opacity 0.1s linear; }
+@media (prefers-reduced-motion: reduce) {
+  .walking-arms, .walking-legs { animation: none; }
+  .chapter-title { transition: none; }
+}
 .preparation-tip {
   position: absolute;
   display: flex;

@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { io, type Socket } from "socket.io-client";
 import { Pool } from "pg";
 import {
   adminOverviewSchema, catalogSchema, healthSchema, matchSnapshotSchema,
-  type ClientToServerEvents, type MatchSnapshot, type ServerToClientEvents,
+  commandResultSchema, type MatchCommand, type ClientToServerEvents, type MatchSnapshot, type ServerToClientEvents,
 } from "@terror/contracts";
 import { createApplication } from "../app.js";
 import { loadCatalog, migrate } from "../database.js";
@@ -40,7 +41,8 @@ test("API, migrations, frozen configuration, login-free admin and socket reconne
     assert.equal(definition.attributes.wisdom, 2);
     assert.equal("intelligence" in definition.attributes, false);
   }
-  const match = new Match(catalog);
+  let clock = 0;
+  const match = new Match(catalog, () => clock);
   application = createApplication(pool, match);
   application.httpServer.listen(0, "127.0.0.1");
   await once(application.httpServer, "listening");
@@ -62,6 +64,7 @@ test("API, migrations, frozen configuration, login-free admin and socket reconne
     autoConnect: false,
     transports: ["websocket"],
     reconnection: false,
+    auth: { clientId: randomUUID() },
   });
   socket = client;
   const nextSnapshot = () => new Promise<MatchSnapshot>((resolve, reject) => {
@@ -86,6 +89,50 @@ test("API, migrations, frozen configuration, login-free admin and socket reconne
   const reconnected = nextSnapshot();
   client.connect();
   assert.deepEqual(await reconnected, snapshot);
+
+  const command = async (value: MatchCommand) => commandResultSchema.parse(
+    await client.timeout(3000).emitWithAck("match:command", value),
+  );
+  assert.deepEqual(await command({ type: "join", slot: 0, name: "AAA" }), { ok: true });
+  assert.equal((await command({ type: "join", slot: 1, name: "AAA" })).ok, false);
+  assert.deepEqual(await command({ type: "join", slot: 1, name: "AAB" }), { ok: true });
+  assert.deepEqual(await command({ type: "ready", slot: 0, value: true }), { ok: true });
+  assert.deepEqual(await command({ type: "ready", slot: 1, value: true }), { ok: true });
+  clock += 3000;
+  match.tick();
+  assert.equal(match.snapshot().remainingMs, 7000);
+  assert.deepEqual(await command({ type: "ready", slot: 0, value: false }), { ok: true });
+  assert.equal(match.snapshot().phase, "lobby");
+  assert.deepEqual(await command({ type: "ready", slot: 0, value: true }), { ok: true });
+  assert.equal(match.snapshot().remainingMs, 10000);
+  clock += 10000;
+  match.tick();
+  clock += 2000;
+  match.tick();
+  assert.equal(match.snapshot().phase, "running");
+  assert.equal((await command({ type: "attribute", slot: 0, attribute: "wisdom", delta: 1 })).ok, false);
+  assert.deepEqual(await command({ type: "press", slot: 0 }), { ok: true });
+  assert.equal((await command({ type: "pause", slot: 0 })).ok, false);
+  assert.deepEqual(await command({ type: "move", slot: 0, position: { x: 500, y: 500 } }), { ok: true });
+  assert.deepEqual(await command({ type: "release", slot: 0 }), { ok: true });
+  const serverSocket = application.io.sockets.sockets.get(client.id ?? "");
+  assert.ok(serverSocket);
+  const disconnected = once(serverSocket, "disconnect");
+  client.disconnect();
+  await disconnected;
+  assert.equal(match.snapshot().phase, "paused");
+  const reconnectActive = nextSnapshot();
+  client.connect();
+  const restored = await reconnectActive;
+  assert.deepEqual(restored.controlSlots, [0, 1]);
+  assert.deepEqual(restored.players[0]?.position, { x: 500, y: 500 });
+  assert.deepEqual(await command({ type: "resume", slot: 0, value: true }), { ok: true });
+  assert.equal(match.snapshot().phase, "paused");
+  assert.deepEqual(await command({ type: "resume", slot: 1, value: true }), { ok: true });
+  assert.equal(match.snapshot().phase, "running");
+  assert.deepEqual(await command({ type: "leave", slot: 0 }), { ok: true });
+  assert.deepEqual(await command({ type: "leave", slot: 1 }), { ok: true });
+  assert.equal(match.snapshot().phase, "lobby");
 
   originalRevision = catalog.revision;
   await pool.query("UPDATE game_settings SET revision = revision + 1 WHERE id = 'default'");

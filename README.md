@@ -17,27 +17,36 @@ aqui prevalecem sobre alternativas antigas dessa proposta.
 - [x] Registrar requisitos, etapas e instruções para continuidade.
 - [x] Implementar a base técnica (aceite no tablet real ainda pendente).
 - [x] Implementar o fluxo local de seleção, calibração e tokens da etapa 2.
+- [x] Implementar início, capítulo e pausa autoritativos sobre a geometria atual.
 - [x] Validar acesso LAN no tablet real.
 - [ ] Completar o aceite de dez contatos entre tokens e controles no tablet.
 
-**Estado:** etapa 2 implementada no cliente: oito setores, seleção local de
-personagem, calibração compartilhada, prévia do token e arrasto por ponteiros
-independentes.
+**Estado:** etapas 2 e 3 implementadas sobre a geometria de prévia. O servidor
+agora mantém participantes, atributos, escala, posições, prontidão, contagem,
+capítulo e pausa em memória, com contratos validados e comandos Socket.IO.
+Objetivos, obstáculos e mapa procedural jogável permanecem para a etapa 4.
 Fullscreen e áudio são autorizados por interação; quatro dicas orientadas ficam
 fora da caixa central, uma em cada lado, sem ocupar os setores. Cada setor
 ocupado tem duas colunas verticais: nome/saída à esquerda e abas de jogo,
 token e personagem à direita, com painel central compacto. A entrada escolhe
 três letras (AAA inicialmente), sem duplicar nomes na mesma mesa; abre a aba
-de jogo, ainda vazia. Saída exige confirmação no próprio setor. Atributos usam
+de jogo com “Estou pronto”. Saída fica logo abaixo do nome e exige confirmação
+no próprio setor. Atributos usam
 ícones com explicação provisória em modal interno, contador verde +3/+2/+1/+0 e
 alerta vermelho na aba enquanto faltam pontos a distribuir. O jogador distribui
 três pontos entre força, destreza e inteligência, partindo de 1 em cada atributo.
 Os campos ingleses são `strength`, `dexterity` e `wisdom`.
-As definições, nomes e posições ainda são locais ao
-navegador; o servidor continua mantendo apenas o lobby, sem prontidão, partida
-ativa ou pausa. O usuário confirmou acesso LAN, calibração comum e arrasto de
-todos os tokens no tablet. O bloqueio dos controles durante o arrasto foi
-corrigido no cliente e aguarda novo teste físico.
+Todos prontos iniciam dez segundos regressivos na central; desmarcar qualquer
+prontidão cancela e uma nova confirmação coletiva reinicia em dez. Pontos
+restantes não impedem iniciar, mas atributos/escala/entrada ficam bloqueados
+ao terminar a contagem. Qualquer jogador pode pausar; todos os participantes
+conectados precisam confirmar para retomar. Desconexão de cliente participante
+pausa; reconectar recupera seus setores e exige nova confirmação coletiva.
+O usuário confirmou o aceite anterior, mas relatou que tokens grandes não
+arrastavam no tablet. A causa identificada foi o círculo de toque não atualizado
+ao redimensionar a zona Phaser; a correção e os novos controles exigem reteste
+físico. Enquanto o próprio token está pressionado, todo o setor fica bloqueado,
+muda para a aba de jogo e mostra caminhada animada com explicação.
 Os tokens dos setores 5 e 7 começam diante de seus próprios setores; os setores
 laterais 4 e 8 foram girados em mais 180° para leitura por quem está fora da mesa.
 As duas dicas verticais externas à central também receberam mais 180°,
@@ -51,12 +60,11 @@ da interface, independente da conexão; desaparece apenas com áudio em execuç�
 e tela cheia ativa, reaparecendo se qualquer um deixar de estar ativo. A
 instrução textual sobre arrastar e calibrar foi removida da preparação.
 
-**Próxima etapa:** concluir o aceite da etapa 2 no tablet pela LAN: confirmar
-dez contatos simultâneos entre tokens e controles, agora com abas e controles
-por ponteiro, sem scroll/zoom involuntário, fullscreen, áudio e cancelamento.
-A interface permanece sem a instrução textual de arrasto; só depois do aceite
-físico avançar para início da partida e pausa. Revalidar os setores compactos,
-as rodas de letras, os modais e os alvos de toque menores no dispositivo real.
+**Próxima etapa:** retestar no tablet tokens grandes/pequenos, bloqueio de setor,
+dez contatos e o fluxo de prontidão/contagem/cancelamento/pausa/retomada. O usuário
+autorizou avançar à etapa 3 com essa limitação registrada, sem marcar o aceite
+físico como concluído. A próxima implementação é a etapa 4 (mapa procedural e
+objetivos), apenas quando solicitada; não confundir a prévia atual com esse mapa.
 
 **Primeiro marco jogável:** entrada dos jogadores, calibração compartilhada,
 tokens com movimento simultâneo e obstáculos simples no tablet real.
@@ -126,12 +134,12 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
 - O jogador entra pelo próprio setor, escolhe um nome de três letras maiúsculas
   de A a Z, começando em AAA. As rodas reutilizáveis aceitam botões, arrasto,
   roda do mouse e setas do teclado, com volta entre A/Z. Nomes duplicados são
-  rejeitados atomicamente no estado local da mesa, inclusive em entradas
-  simultâneas. Sincronização de participantes entre clientes fica para a etapa 3.
-- Após entrar, a aba de jogo abre vazia. Nome e saída ficam à esquerda; jogo,
+  rejeitados atomicamente no servidor, inclusive em entradas simultâneas.
+- Após entrar, a aba de jogo abre com a confirmação “Estou pronto”. Nome e saída
+  ficam à esquerda; saída logo abaixo do nome, sem alinhamento ao rodapé; jogo,
   calibração e atributos ficam à direita, em colunas verticais de botões de
   32 px CSS. O botão de saída tem o mesmo tamanho das abas e exige confirmação.
-  Prontidão ainda não está implementada.
+  A confirmação para retomar a pausa reutiliza a estrutura de prontidão.
 - Modais cobrem somente o próprio setor, com fechamento por botão ou Escape,
   foco de teclado contido e controles de fundo inativos. Erros de entrada/ação
   mudam apenas a borda para vermelho; detalhes são anunciados por `role=alert`
@@ -157,7 +165,15 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
   ao vão entre setores superiores/inferiores menos 12 px, evitando sobreposição.
 - A calibração mostra o token e botões +/−, sem exibir o valor do multiplicador.
 - A escala da prévia vai de 0,5× a 2×, sem recriar o canvas. Esse intervalo ainda
-  não é uma regra definitiva nem está sincronizado com o servidor.
+  não é uma regra definitiva, mas agora está sincronizado com o servidor.
+- Ao redimensionar o token, atualizar o círculo de toque existente, não apenas
+  chamar `setInteractive` de novo: Phaser reativa a área antiga nesse caso.
+  O círculo deve sempre ter centro e raio iguais à metade do diâmetro atual.
+- Pressionar o token reserva um ponteiro por jogador e bloqueia todo o seu
+  setor, incluindo abas, configuração, prontidão e saída. A aba de jogo mostra
+  uma animação de caminhada e “Não é possível executar ação enquanto em
+  movimento.” Soltar, cancelar o toque, perder foco, pausar ou desconectar libera
+  a reserva. Outros jogadores continuam podendo usar seus próprios controles.
 - Sobras são fundo do `body` com névoa decorativa, visto pelo canvas transparente.
   Não são transitáveis e não substituem a névoa de visibilidade da etapa 5.
 - Calcular a área útil removendo os setores dos jogadores. Tokens, caminhos,
@@ -388,20 +404,52 @@ docker compose stop
 - O bundle inicial inclui Phaser e recebe aviso de tamanho do Vite; Nginx usa
   gzip e cache para assets versionados. Fluidez e custo real no tablet ainda
   não foram medidos; não declarar metas de FPS/latência como atingidas.
-- Acesso pelo tablet físico, fullscreen, áudio e dez toques ainda não validados.
+- Acesso pelo tablet físico confirmado. Aceite anterior de controles/fullscreen/
+  áudio foi informado pelo usuário, mas tokens grandes falharam; reteste físico
+  da correção, bloqueio de setor e ciclo de partida permanece pendente.
 
 ## Início da partida
 
 - Todos os participantes ativos prontos iniciam uma contagem de 10 segundos.
-- Exibir a contagem em seus setores; setores vazios ficam invisíveis nessa fase.
+- “Estou pronto” é uma confirmação alternável no painel de jogo; a contagem
+  aparece regressiva na central. Setores vazios desaparecem quando começa o
+  capítulo/partida, mas continuam disponíveis durante a preparação/contagem.
 - Cancelar prontidão/contagem cancela a contagem para todos.
+- Os demais mantêm sua confirmação; quando todos voltam a estar prontos,
+  reiniciar em dez segundos, nunca continuar o tempo cancelado.
+- Editar atributos desmarca prontidão do jogador; alterar escala/tamanho da
+  mesa desmarca todos e cancela a contagem. Entrar/sair também cancela a contagem.
+- Não exigir gastar todos os pontos para confirmar prontidão. Ao fim dos dez
+  segundos, atributos, escala e novas entradas ficam bloqueados, mesmo com
+  pontos restantes, inclusive durante a pausa.
 - Gerar e validar o mapa antes de começar; não iniciar um mapa incompleto caso
   a geração demore mais do que a contagem.
-- O círculo de calibração define o ponto inicial do jogador, conciliado com
-  uma posição válida de entrada no mapa.
-- Apresentar o capítulo no centro, esmaecer o título e iniciar a simulação.
-- Prever desistência e pausa com controles simples. Regras de quem pode pausar
-  e como sair de uma partida ativa ainda precisam ser definidas.
+- Nesta entrega, escolher no servidor uma célula distinta da geometria atual
+  por jogador, próxima ao seu setor. Não começar se faltarem células válidas.
+  Conectividade, obstáculos e objetivos são escopo da etapa 4.
+- Apresentar “Capítulo 1: O silêncio da noite” na central por dois segundos,
+  esmaecer pelo tempo autoritativo e iniciar a simulação. Título é provisório
+  próprio, sem arte/frases de personagens protegidos.
+- Qualquer jogador pode pausar. Pausa congela posições, relógio de simulação e
+  o tempo restante do capítulo; o painel de jogo mostra “Pronto para retomar”.
+  Todos os participantes conectados devem confirmar; desmarcar revoga o voto.
+- Saída confirmada remove apenas aquele jogador. O último encerra a partida
+  e retorna ao lobby. Desconexão mantém jogadores/posições e pausa a partida;
+  reconexão não retoma automaticamente. Desconectar observadores não pausa.
+- Identidade de reconexão da aba fica em `sessionStorage`, sem login/token de
+  autenticação. O servidor vincula setores a esse cliente e recusa comandos
+  para setores alheios; isso não é autenticação segura para redes não confiáveis.
+  Reabrir sem a identidade original não recupera setores órfãos automaticamente.
+- Reiniciar o servidor encerra a partida; PostgreSQL continua apenas com
+  conteúdo/configurações. Um novo servidor recebe outra identidade de partida.
+- Arena/escala ficam fixas durante a partida. Resize ativo apenas reenquadra a
+  câmera dentro da área útil, sem mudar posições canônicas. `ResizeObserver`
+  sincroniza o canvas com o contêiner, incluindo fullscreen e alterações de
+  tamanho que o polling de resize do Phaser não detecte. Movimento local é fluido no Phaser;
+  comandos de posição são limitados a 20 Hz, sem React/banco por frame.
+  O servidor valida movimentos no retângulo útil nesta etapa; colisões ainda
+  não estão implementadas. Snapshot só contém a visão compartilhada atual
+  dos jogadores, sem dados futuros do monstro.
 
 ## Mapa procedural modular
 
@@ -451,7 +499,8 @@ docker compose stop
   disponíveis na aba de personagem. Cada “+” consome um ponto; “−” devolve um.
   Não baixar de 1, ultrapassar 3 ou gastar mais de três pontos. Exemplos de
   distribuição completa: 3/2/1 e 2/2/2. Pontos ainda livres ficam explicitamente
-  indicados; prontidão e sua validação pertencem à etapa 3.
+  indicados; pontos restantes não impedem prontidão, mas não poderão ser
+  distribuídos após o início.
 - O painel tem quatro colunas: contador +N verde grande e força, destreza,
   inteligência. Braço musculoso, tênis em movimento e cérebro substituem os
   textos; tocar no ícone abre título e lorem ipsum em modal interno fechável.
@@ -459,7 +508,8 @@ docker compose stop
   vermelho absoluto no canto superior direito, usado na aba de atributos
   enquanto houver pontos livres, sem depender de um texto visível.
 - A distribuição é independente por jogador e atualiza o token de calibração
-  e o token no tabuleiro. Não grava movimentos/definições locais no PostgreSQL.
+  e o token no tabuleiro. O servidor valida e mantém o estado em memória;
+  não grava movimentos/atributos da partida ativa no PostgreSQL.
 - A proposta associa força a sons emitidos, destreza a cansaço e inteligência
   a comportamento desastrado. Fórmulas e a direção dessas compensações ainda
   precisam ser esclarecidas antes de implementar o balanceamento.
@@ -620,7 +670,7 @@ desligado sem interromper jogo/servidor.
   sem ultrapassar o diâmetro calibrado.
 - [x] Setores com abas de token e personagem; controles ativados por ponteiro,
   sem depender de cliques sintetizados em gestos multitoque.
-- [x] Distribuição local de três pontos, base 1/1/1 e limites 1–3, com reembolso,
+- [x] Distribuição de três pontos, base 1/1/1 e limites 1–3, com reembolso,
   contador individual e atualização dos indicadores F/D/I.
 - [x] Quatro dicas externas à central e setores compactos; atributos em quatro
   colunas com ícones, contador +N e destaque verde dos níveis alocados.
@@ -642,11 +692,16 @@ repetir esse cenário no tablet, incluindo os novos controles de atributos,
 nomes de três letras, duas colunas de navegação e modais internos,
 e validar fullscreen, áudio e gestos nativos.
 
-### 3. Início, capítulo e pausa
+### 3. Início, capítulo e pausa — implementada na geometria atual; aceite físico pendente
 
-- [ ] Prontidão, contagem de dez segundos e cancelamento coletivo.
-- [ ] Posições iniciais válidas, título do capítulo e início sincronizado.
-- [ ] Pausa/retomada e reconexão à partida ativa.
+- [x] Prontidão, contagem central de dez segundos e cancelamento coletivo.
+- [x] Posições iniciais distintas na geometria atual, título do capítulo e
+  início sincronizado; mapa procedural/objetivos permanecem na etapa 4.
+- [x] Pausa/retomada coletiva e reconexão à partida ativa.
+- [x] Configuração bloqueada após contagem, mesmo com pontos não distribuídos.
+- [x] Bloqueio central de ações pelo próprio token pressionado, animação no
+  setor e atualização da área de toque ao mudar escala.
+- [ ] Aceite físico do novo fluxo e da correção dos tokens grandes.
 
 **Aceite:** posição e tempo restante das ações não mudam durante a pausa;
 reiniciar o servidor não restaura a partida anterior.
@@ -731,7 +786,7 @@ sem duplicar controladores ou expor informações ocultas.
 - Limites mínimo/máximo da escala e comportamento se o mapa não couber.
 - Fórmulas de atributos, compensações e fadiga; thresholds do arrasto.
 - Duração do turno, resgate, desativação e revelação por armadilha.
-- Política de desconexão, pausa, desistência e alterações de participantes.
+- Reconexão após perder a identidade da aba e política para setores órfãos.
 - Regras exatas da fuga e requisitos de combustível.
 - Assets próprios/licenciados e identidade visual do primeiro monstro.
 - Validação do acesso LAN no tablet, inclusive firewall/encaminhamento se WSL.
@@ -756,6 +811,8 @@ sem duplicar controladores ou expor informações ocultas.
 | 2026-11-01 | Revisão removida da central; `NODE_ENV` ligado ao servidor/build do jogo e resumo de prévia restrito a não produção. Áudio/tela cheia em sobreposição central, visível somente enquanto algum deles não está ativo, com acompanhamento de mudanças do áudio. | Typecheck, build local e builds Docker nos dois ambientes passaram. Navegador confirmou presença/ausência da prévia em development/production, botão central acima da interface mesmo com conexão em erro e ocultação/reaparecimento com APIs simuladas de áudio/tela cheia. Teste nativo não concluiu na página compartilhada oculta; reteste físico pendente. Ambiente development restaurado, volume preservado e `check:stack` aprovado; próxima etapa permanece o aceite da mesa. |
 | 2026-11-01 | Instrução textual de arrasto e calibração removida da preparação para reduzir texto na interface do jogo. | Validado build de `@terror/game` e busca confirmando que a frase não permanece no código. Próxima etapa continua sendo o aceite físico da mesa. |
 | 2026-11-01 | Setores com duas colunas verticais e painel central; rodas de três letras com nomes únicos locais; jogo vazio ao entrar; confirmação de saída; atributos por ícones, +N verde, níveis alocados verdes, modais e alerta reutilizável. Calibração sem multiplicador, walkie-talkie baseado na referência e ícones CC0 de jogo/saída. Campo `wisdom` com migração 003 preservando conteúdo. | `npm run typecheck`, `npm test` (11 contratos + 3 servidor), `npm run build`, integração PostgreSQL isolada pelo perfil `test`, publicação de servidor/jogo e `npm run check:stack` passaram. Navegador confirmou duplicidade/reentrada, distribuição e reembolso, alerta, modais, cancelamento da saída, teclado/mouse e arrasto/toque das letras sem clique duplicado ao soltar sobre a seta. Em 1920×1200 e 960×600 CSS, escalas 1/2, oito setores não cortam controles nem se sobrepõem; abas e saída medem 32×32 px. Profundidade passou de 152/184 para 116/140 px, liberando 13%/17% de área útil em 1920×1200. Teste misto confirmou oito arrastos por eventos Phaser com dois controles por toque CDP; o ensaio inteiramente nativo não comprovou os arrastos e não substitui aceite físico. Volume preservado e PostgreSQL de teste parado. Próxima etapa permanece o aceite no tablet, especialmente alvos menores, dez contatos, fullscreen e áudio. |
+| 2026-11-01 | Saída reposicionada abaixo do nome. Corrigido círculo de toque antigo ao aumentar tokens; setor bloqueado pelo próprio token pressionado, com troca para jogo e caminhada animada. Etapa 3 no servidor: participantes/posições/atributos/escala em memória, prontidão alternável, contagem central de dez segundos, cancelamento/reinício, posições distintas em células da prévia, capítulo próprio, configuração bloqueada mesmo com pontos livres, pausa e retomada coletiva, reconexão e saída individual/último encerra. | `npm run typecheck`, `npm test` (12 contratos + 8 servidor), `npm run build`, integração API/Socket.IO em PostgreSQL isolado, builds Docker e `npm run check:stack` passaram. Chromium/CDP confirmou arrasto nativo de oito tokens a 128 px, bloqueio dos oito setores e liberação ao cancelar; dez contatos nativos com seis tokens e quatro controles de dois jogadores parados distribuíram pontos sem bloquear os arrastos. Navegador confirmou 10→8, cancelamento e reinício em 10, capítulo e início com pontos sobrando, edição desabilitada, pausa congelando exatamente posições/relógio, retomada com todos, recarga pausando e recuperando setores, saída individual e retorno ao lobby pelo último. Resize ativo 1920×1200→960×600 preservou arena/posições e reenquadrou tokens dentro da área reservada do mapa. Usuário confirmou aceite anterior, mas relatou falha física com tokens grandes: reteste da correção e do novo fluxo permanece pendente; não marcar dez contatos físicos como concluídos. Volume preservado, banco de teste parado; próxima implementação será mapa procedural/objetivos da etapa 4 quando solicitada. |
+| 2026-11-01 | Sincronização do canvas por `ResizeObserver` usando `setParentSize` do Phaser em modo RESIZE, corrigindo dimensões antigas após aumentar o contêiner. | Build Docker do jogo e `npm run check:stack` passaram; somente `game` foi republicado. Chromium/CDP confirmou canvas e viewport coincidentes em 960×600 e 1920×1200, arrasto nativo do token de 128 px com raio de toque 64 px, bloqueio/liberação do setor e resize durante partida sem alterar arena/posições canônicas. Mesa de teste devolvida ao lobby vazio, escala 1. Reteste físico continua pendente. |
 
 Adicionar novas linhas com entregas reais e evidências de validação. Não listar
 como concluídos comportamentos ainda apenas planejados.

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export { parseApiResponse } from "./http.js";
-export { boardArea, cellDimensions, hexCorners, playerSectorDepth, terrainLayout } from "./layout.js";
+export { boardArea, cellDimensions, hexCorners, playerSectorDepth, terrainLayout, tokenHitCircle, initialTokenPosition } from "./layout.js";
 export { enterPreparationPlayer, leavePreparationPlayer, changePreparationAttribute, rotatePlayerName, playerNameSchema, type PreparationState } from "./preparation.js";
 
 const attributeSchema = z.number().int().min(1).max(3);
@@ -67,12 +67,58 @@ export const catalogSchema = z.strictObject({
   settings: settingsSchema,
 });
 
-export const matchSnapshotSchema = z.strictObject({
-  id: z.uuid(),
-  phase: z.literal("lobby"),
-  catalogRevision: z.number().int().positive(),
+export const arenaSchema = z.strictObject({
+  width: z.number().finite().min(320).max(7680),
+  height: z.number().finite().min(320).max(7680),
+  scale: z.number().min(0.5).max(2),
+});
+export const pointSchema = z.strictObject({ x: z.number().finite(), y: z.number().finite() });
+export const matchPlayerSchema = z.strictObject({
+  slot: z.number().int().min(0).max(7),
+  name: z.string().regex(/^[A-Z]{3}$/),
+  attributes: playerAttributesSchema,
+  ready: z.boolean(),
+  resumeReady: z.boolean(),
+  connected: z.boolean(),
+  pressed: z.boolean(),
+  position: pointSchema,
 });
 
+export const matchSnapshotSchema = z.strictObject({
+  id: z.uuid(),
+  phase: z.enum(["lobby", "countdown", "chapter", "running", "paused"]),
+  catalogRevision: z.number().int().positive(),
+  players: z.array(matchPlayerSchema).max(8),
+  arena: arenaSchema,
+  remainingMs: z.number().nonnegative(),
+  simulationMs: z.number().nonnegative(),
+  chapter: z.string(),
+  error: z.string(),
+  controlSlots: z.array(z.number().int().min(0).max(7)).max(8),
+});
+
+const slot = z.number().int().min(0).max(7);
+export const matchCommandSchema = z.discriminatedUnion("type", [
+  z.strictObject({ type: z.literal("join"), slot, name: z.string().regex(/^[A-Z]{3}$/) }),
+  z.strictObject({ type: z.literal("leave"), slot }),
+  z.strictObject({ type: z.literal("attribute"), slot, attribute: z.enum(["strength", "dexterity", "wisdom"]), delta: z.union([z.literal(-1), z.literal(1)]) }),
+  z.strictObject({ type: z.literal("scale"), slot, delta: z.union([z.literal(-0.05), z.literal(0.05)]) }),
+  z.strictObject({ type: z.literal("viewport"), width: arenaSchema.shape.width, height: arenaSchema.shape.height }),
+  z.strictObject({ type: z.literal("ready"), slot, value: z.boolean() }),
+  z.strictObject({ type: z.literal("pause"), slot }),
+  z.strictObject({ type: z.literal("resume"), slot, value: z.boolean() }),
+  z.strictObject({ type: z.literal("press"), slot }),
+  z.strictObject({ type: z.literal("release"), slot }),
+  z.strictObject({ type: z.literal("move"), slot, position: pointSchema }),
+]);
+export const commandResultSchema = z.discriminatedUnion("ok", [
+  z.strictObject({ ok: z.literal(true) }),
+  z.strictObject({ ok: z.literal(false), error: z.string().min(1) }),
+]);
+export type MatchCommand = z.infer<typeof matchCommandSchema>;
+export type CommandResult = z.infer<typeof commandResultSchema>;
+export type MatchPlayer = z.infer<typeof matchPlayerSchema>;
+export type Arena = z.infer<typeof arenaSchema>;
 export const healthSchema = z.strictObject({
   status: z.literal("ok"),
   database: z.literal("ready"),
@@ -98,7 +144,7 @@ export interface ServerToClientEvents {
   "match:snapshot": (snapshot: MatchSnapshot) => void;
 }
 
-// No client commands are exposed before their authoritative rules exist.
 export interface ClientToServerEvents {
   "match:request": () => void;
+  "match:command": (command: MatchCommand, reply: (result: CommandResult) => void) => void;
 }

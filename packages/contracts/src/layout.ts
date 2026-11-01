@@ -36,6 +36,23 @@ export function playerSectorDepth(scale: number): number {
   return Math.max(116, cellDimensions(scale).tokenDiameter + 12);
 }
 
+export function tokenHitCircle(diameter: number) {
+  z.number().positive().finite().parse(diameter);
+  return { x: diameter / 2, y: diameter / 2, radius: diameter / 2 };
+}
+
+export function initialTokenPosition(slot: number, area: Point & { width: number; height: number }, diameter: number): Point {
+  z.number().int().min(0).max(7).parse(slot);
+  const fraction = [0.2, 0.5, 0.8][slot < 3 ? slot : slot - 4] ?? 0.5;
+  if (slot === 3 || slot === 7) return {
+    x: slot === 3 ? area.x + area.width - diameter / 2 : area.x + diameter / 2,
+    y: area.y + area.height / 2,
+  };
+  return {
+    x: area.x + area.width * fraction,
+    y: slot < 3 ? area.y + diameter / 2 : area.y + area.height - diameter / 2,
+  };
+}
 export function boardArea(width: number, height: number, scale = 1) {
   z.number().nonnegative().finite().parse(width);
   z.number().nonnegative().finite().parse(height);
