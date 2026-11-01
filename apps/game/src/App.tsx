@@ -20,10 +20,12 @@ import { PlayerSector } from "./PlayerSector.js";
 import { TouchButton } from "./TouchButton.js";
 import { PreparationTips } from "./PreparationTips.js";
 
+const isProduction = import.meta.env.APP_NODE_ENV === "production";
+
 export function App() {
   const [catalog, setCatalog] = useState<Catalog>();
   const [snapshot, setSnapshot] = useState<MatchSnapshot>();
-  const [connection, setConnection] = useState("Conectando…");
+  const [connection, setConnection] = useState<"connected" | "connecting" | "error">("connecting");
   const [error, setError] = useState("");
   const [activationError, setActivationError] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
@@ -42,10 +44,10 @@ export function App() {
     const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io({
       autoConnect: false,
     });
-    socket.on("connect", () => setConnection("Conectado"));
-    socket.on("disconnect", () => setConnection("Desconectado — tentando reconectar…"));
+    socket.on("connect", () => setConnection("connected"));
+    socket.on("disconnect", () => setConnection("connecting"));
     socket.on("connect_error", (failure) => {
-      setConnection("Servidor indisponível — tentando reconectar…");
+      setConnection("error");
       setError(`Falha na conexão: ${failure.message}`);
     });
     socket.on("match:snapshot", (value) => {
@@ -85,8 +87,10 @@ export function App() {
   }, []);
 
   useEffect(() => () => {
-    if (audioContext.current && audioContext.current.state !== "closed") {
-      void audioContext.current.close();
+    const context = audioContext.current;
+    if (context) {
+      context.onstatechange = null;
+      if (context.state !== "closed") void context.close();
     }
   }, []);
 
@@ -105,7 +109,11 @@ export function App() {
     }
 
     try {
-      audioContext.current ??= new window.AudioContext();
+      if (!audioContext.current || audioContext.current.state === "closed") {
+        const context = new window.AudioContext();
+        context.onstatechange = () => setAudioReady(context.state === "running");
+        audioContext.current = context;
+      }
       await audioContext.current.resume();
       if (audioContext.current.state !== "running") {
         setAudioReady(false);
@@ -173,25 +181,32 @@ export function App() {
         <section className="status" aria-live="polite">
           <div className="status-heading">
             <h1>Terror</h1>
-            <p>{connection}</p>
+            <span
+              className={`connection-indicator connection-indicator--${error ? "error" : connection}`}
+              role="status"
+              aria-label={error || connection === "error" ? "Erro na conexão ou no conteúdo"
+                : connection === "connected" ? "Conectado" : "Conectando"}
+            />
           </div>
           {error && <p role="alert" className="error">{error}</p>}
           {snapshot && catalog && (
-            <p>Preparação · conteúdo v{snapshot.catalogRevision} · {Object.keys(selections).length}/8 jogadores</p>
+            <p>Preparação · {Object.keys(selections).length}/8 jogadores</p>
           )}
           <p className="note">Arraste seu token. A calibração de qualquer setor ajusta todos.</p>
-          {layout && <p className="note">Prévia · {layout.terrains} terrenos · token {Math.round(layout.tokenDiameter)} px</p>}
+          {!isProduction && layout && <p className="note preview-summary">Prévia · {layout.terrains} terrenos · token {Math.round(layout.tokenDiameter)} px</p>}
           {layout?.terrains === 0 && <p role="alert" className="error">Não cabe um terreno completo nesta escala.</p>}
-          {activationError && <p role="alert" className="error">{activationError}</p>}
           {selectionState.error && <p role="alert" className="error">{selectionState.error}</p>}
-          <TouchButton className="immersive-button" onPress={() => void activateImmersiveMode()}>
-            {fullscreen && audioReady ? "Áudio e tela cheia ativados"
-              : fullscreen ? "Tela cheia ativada · áudio pendente"
-                : audioReady ? "Áudio ativado · tela cheia pendente"
-                  : "Ativar tela cheia e áudio"}
-          </TouchButton>
         </section>
       </div>
+      {(!fullscreen || !audioReady) && (
+        <div className="immersive-overlay">
+          <TouchButton className="immersive-button" onPress={() => void activateImmersiveMode()}>
+            {fullscreen ? "Ativar áudio"
+              : audioReady ? "Ativar tela cheia" : "Ativar tela cheia e áudio"}
+          </TouchButton>
+          {activationError && <p role="alert" className="error">{activationError}</p>}
+        </div>
+      )}
     </main>
   );
 }

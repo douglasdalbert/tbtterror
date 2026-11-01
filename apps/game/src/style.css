@@ -129,10 +129,24 @@ body {
 }
 h1 { margin: 0; font-size: 1.5rem; }
 .status-heading { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.connection-indicator { width: 14px; height: 14px; flex: 0 0 14px; border-radius: 50%; border: 1px solid #ffffff66; }
+.connection-indicator--connected { background: #4ade80; }
+.connection-indicator--connecting { background: #facc15; }
+.connection-indicator--error { background: #f87171; }
 p { margin: 6px 0; }
 .note { color: #b1c0d0; font-size: 13px; }
 .error { color: #ffaaa5; }
 .immersive-button { pointer-events: auto; }
+.immersive-overlay {
+  position: fixed;
+  z-index: 10;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+.immersive-overlay .error { padding: 6px; background: #111923; border-radius: 7px; }
 @media (max-height: 650px) {
   .sector--side .character-definition { gap: 4px; font-size: 11px; }
   .sector--side .attribute-columns { grid-template-columns: 1fr; gap: 2px; }

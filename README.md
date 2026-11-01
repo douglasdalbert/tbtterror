@@ -37,6 +37,13 @@ Os tokens dos setores 5 e 7 começam diante de seus próprios setores; os setore
 laterais 4 e 8 foram girados em mais 180° para leitura por quem está fora da mesa.
 As duas dicas verticais externas à central também receberam mais 180°,
 acompanhando a orientação de leitura dos setores laterais.
+O cabeçalho central mostra a conexão por uma bola: verde quando conectado,
+amarela enquanto conecta/reconecta e vermelha em falhas de conexão/conteúdo.
+O indicador mantém nome acessível; detalhes de erros continuam explícitos.
+A revisão de conteúdo não aparece na central. O resumo de prévia só aparece
+fora de produção. O botão de áudio/tela cheia é uma sobreposição central acima
+da interface, independente da conexão; desaparece apenas com áudio em execução
+e tela cheia ativa, reaparecendo se qualquer um deixar de estar ativo.
 
 **Próxima etapa:** concluir o aceite da etapa 2 no tablet pela LAN: confirmar
 dez contatos simultâneos entre tokens e controles, agora com abas e controles
@@ -191,6 +198,27 @@ por Git e pelo contexto Docker. Alternativamente, copiar `.env.example` para
   acessível pelo tablet. Conferir encaminhamento de portas e firewall do Windows
   para a porta do jogo. Não expor API ou banco diretamente.
 - Esta base usa HTTP apenas na LAN confiável; não publicar na internet.
+
+### Ambiente de execução
+
+- `.env`, `.env.example` e `setup:env` usam `NODE_ENV=development` por padrão.
+  O arquivo local existente foi atualizado sem alterar credenciais.
+- Decisões condicionais usam somente `NODE_ENV === "production"` ou sua
+  negação; qualquer outro valor é não produção. Validar ambos os casos ao
+  mudar comportamento condicionado ao ambiente.
+- Compose passa o valor ao servidor e ao build do jogo. No Vite local, o jogo
+  lê apenas `NODE_ENV` do arquivo na raiz; nenhum segredo é enviado ao cliente.
+  O build continua otimizado mesmo no ambiente de jogo não produção.
+- Somente fora de produção aparece “Prévia · X terrenos · token Y px”.
+  Erros de conexão, configuração, ações e mapa continuam visíveis em produção.
+- Após alterar o valor em `.env`, executar
+  `docker compose up --build -d --wait server game`; apenas reiniciar Nginx
+  não altera o valor incorporado no JavaScript. Não recriar o servidor durante
+  uma partida. Para Vite local, reiniciar o processo de desenvolvimento.
+- Para verificar somente o jogo em produção sem reiniciar o servidor:
+  `NODE_ENV=production docker compose up --build --no-deps -d --wait game`.
+  Depois restaurar o ambiente de `.env` com
+  `docker compose up --build --no-deps -d --wait game`.
 
 ### Admin opcional
 
@@ -674,6 +702,9 @@ sem duplicar controladores ou expor informações ocultas.
 | 2026-11-01 | Corrigida a inversão dos tokens iniciais dos setores 5/7 e acrescentados 180° à orientação dos setores 4/8. | `npm run build -w @terror/game` e publicação somente do jogo passaram. Navegador em 1920×1200 confirmou os centros renderizados dos tokens 5/7 em x≈475/1445, respectivamente, e as matrizes CSS de rotação dos setores laterais. Reteste físico pendente; próxima etapa continua sendo o aceite da mesa. |
 
 | 2026-11-01 | Dicas verticais da central giradas em +180°, sem mudar posições ou dicas horizontais. | Build do jogo e publicação somente de `game` passaram; navegador confirmou as matrizes CSS de 90° à esquerda e 270° à direita. Reteste físico pendente; próxima etapa permanece o aceite da mesa. |
+
+| 2026-11-01 | Texto de status da conexão substituído por indicador circular verde/amarelo/vermelho no cabeçalho central, com nome acessível e feedback de erro preservado. | Build do jogo e publicação somente de `game` passaram. Navegador confirmou conexão pendente (amarelo), falha simulada com alerta (vermelho) e recuperação (verde), sem texto visível no indicador. Próxima etapa permanece o aceite físico da mesa. |
+| 2026-11-01 | Revisão removida da central; `NODE_ENV` ligado ao servidor/build do jogo e resumo de prévia restrito a não produção. Áudio/tela cheia em sobreposição central, visível somente enquanto algum deles não está ativo, com acompanhamento de mudanças do áudio. | Typecheck, build local e builds Docker nos dois ambientes passaram. Navegador confirmou presença/ausência da prévia em development/production, botão central acima da interface mesmo com conexão em erro e ocultação/reaparecimento com APIs simuladas de áudio/tela cheia. Teste nativo não concluiu na página compartilhada oculta; reteste físico pendente. Ambiente development restaurado, volume preservado e `check:stack` aprovado; próxima etapa permanece o aceite da mesa. |
 
 Adicionar novas linhas com entregas reais e evidências de validação. Não listar
 como concluídos comportamentos ainda apenas planejados.

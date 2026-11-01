@@ -9,7 +9,8 @@ COPY packages/contracts/package.json packages/contracts/package.json
 RUN npm ci
 COPY packages/contracts packages/contracts
 COPY apps/${APP} apps/${APP}
-RUN npm run build -w @terror/contracts && npm run build -w @terror/${APP} \
+ARG APP_NODE_ENV=development
+RUN npm run build -w @terror/contracts && TERROR_NODE_ENV="$APP_NODE_ENV" npm run build -w @terror/${APP} \
     && mkdir /web && cp -r apps/${APP}/dist/. /web/
 
 FROM nginx:1.28-alpine

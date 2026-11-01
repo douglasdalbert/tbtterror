@@ -23,6 +23,7 @@ services:
       target: runtime
     environment:
       POSTGRES_HOST: postgres
+      NODE_ENV: ${NODE_ENV:-development}
       POSTGRES_DB: terror
       POSTGRES_USER: terror
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run npm run setup:env first}
@@ -42,6 +43,7 @@ services:
       dockerfile: docker/web.Dockerfile
       args:
         APP: game
+        APP_NODE_ENV: ${NODE_ENV:-development}
     ports:
       - "${GAME_PORT:-8080}:80"
     depends_on:
@@ -61,6 +63,7 @@ services:
       dockerfile: docker/web.Dockerfile
       args:
         APP: admin
+        APP_NODE_ENV: ${NODE_ENV:-development}
     ports:
       - "${ADMIN_BIND_ADDRESS:-127.0.0.1}:${ADMIN_PORT:-8081}:80"
     depends_on:
