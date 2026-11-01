@@ -12,7 +12,7 @@
   "scripts": {
     "build": "npm run build -w @terror/contracts && npm run build -w @terror/server && npm run build -w @terror/game && npm run build -w @terror/admin",
     "typecheck": "npm run build -w @terror/contracts && npm run typecheck --workspaces --if-present",
-    "test": "npm run build -w @terror/contracts && npm run build -w @terror/server && npm run test -w @terror/contracts && npm run test -w @terror/server",
+    "test": "npm run build -w @terror/contracts && npm run build -w @terror/server && npm run test -w @terror/contracts && npm run test -w @terror/server && npm run test -w @terror/game",
     "test:integration": "npm run build -w @terror/contracts && npm run build -w @terror/server && npm run test:integration -w @terror/server",
     "dev:server": "npm run build -w @terror/contracts && npm run build -w @terror/server && npm run dev -w @terror/server",
     "dev:game": "npm run build -w @terror/contracts && npm run dev -w @terror/game",

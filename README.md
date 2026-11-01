@@ -19,6 +19,7 @@ aqui prevalecem sobre alternativas antigas dessa proposta.
 - [x] Implementar o fluxo local de seleção, calibração e tokens da etapa 2.
 - [x] Implementar início, capítulo e pausa autoritativos sobre a geometria atual.
 - [x] Validar acesso LAN no tablet real.
+- [x] Corrigir falha de inicialização em HTTP da LAN e validar no navegador.
 - [ ] Completar o aceite de dez contatos entre tokens e controles no tablet.
 
 **Estado:** etapas 2 e 3 implementadas sobre a geometria de prévia. O servidor
@@ -65,8 +66,16 @@ fora de produção. O botão de áudio/tela cheia é uma sobreposição central 
 da interface, independente da conexão; desaparece apenas com áudio em execução
 e tela cheia ativa, reaparecendo se qualquer um deixar de estar ativo. A
 instrução textual sobre arrastar e calibrar foi removida da preparação.
+O relato posterior de tela preta no Chrome pela LAN foi reproduzido:
+`crypto.randomUUID()` indisponível em HTTP derrubava a montagem React. A
+identidade da aba agora usa UUID v4 gerado com `crypto.getRandomValues()`,
+compatível com HTTP, e preserva a reconexão via `sessionStorage`. Falhas de
+armazenamento/geração mostram alerta explícito sem desmontar a interface.
+Correção publicada somente no jogo e validada no navegador; reteste físico
+da abertura permanece pendente.
 
-**Próxima etapa:** retestar no tablet tokens grandes/pequenos, bloqueio de setor,
+**Próxima etapa:** recarregar a página no tablet e confirmar que não fica preta;
+retestar tokens grandes/pequenos, bloqueio de setor,
 dez contatos e o fluxo de prontidão/contagem/cancelamento/pausa/retomada. O usuário
 autorizou avançar à etapa 3 com essa limitação registrada, sem marcar o aceite
 físico como concluído. A próxima implementação é a etapa 4 (mapa procedural e
@@ -259,6 +268,11 @@ por Git e pelo contexto Docker. Alternativamente, copiar `.env.example` para
   acessível pelo tablet. Conferir encaminhamento de portas e firewall do Windows
   para a porta do jogo. Não expor API ou banco diretamente.
 - Esta base usa HTTP apenas na LAN confiável; não publicar na internet.
+- A identidade da aba não exige HTTPS: usa `crypto.getRandomValues()`, pois
+  `crypto.randomUUID()` não está disponível no Chrome em HTTP pelo IP da LAN.
+  Se a página ficar preta em uma versão antiga, recarregar para obter o jogo
+  atualizado. Se o navegador bloquear armazenamento/geração da identidade,
+  a versão atual mostra o erro na central em vez de apagar a interface.
 
 ### Ambiente de execução
 
@@ -383,6 +397,9 @@ docker compose --profile test rm -f postgres-test
 não o volume da partida; verifica API, admin sem login, migrações idempotentes,
 cópia de configurações e WebSocket com reconexão. A execução local alternativa,
 `npm run test:integration`, exige `TEST_DATABASE_URL` de um banco dedicado.
+Os testes da identidade do cliente (UUID v4 em HTTP, persistência por aba e
+falhas explícitas) também fazem parte de `npm test`; para executá-los
+isoladamente, usar `npm run test -w @terror/game`.
 
 ```sh
 # Somente sem partida em andamento: altera o ciclo de vida dos serviços!
@@ -834,6 +851,8 @@ sem duplicar controladores ou expor informações ocultas.
 | 2026-11-01 | Saída reposicionada abaixo do nome. Corrigido círculo de toque antigo ao aumentar tokens; setor bloqueado pelo próprio token pressionado, com troca para jogo e caminhada animada. Etapa 3 no servidor: participantes/posições/atributos/escala em memória, prontidão alternável, contagem central de dez segundos, cancelamento/reinício, posições distintas em células da prévia, capítulo próprio, configuração bloqueada mesmo com pontos livres, pausa e retomada coletiva, reconexão e saída individual/último encerra. | `npm run typecheck`, `npm test` (12 contratos + 8 servidor), `npm run build`, integração API/Socket.IO em PostgreSQL isolado, builds Docker e `npm run check:stack` passaram. Chromium/CDP confirmou arrasto nativo de oito tokens a 128 px, bloqueio dos oito setores e liberação ao cancelar; dez contatos nativos com seis tokens e quatro controles de dois jogadores parados distribuíram pontos sem bloquear os arrastos. Navegador confirmou 10→8, cancelamento e reinício em 10, capítulo e início com pontos sobrando, edição desabilitada, pausa congelando exatamente posições/relógio, retomada com todos, recarga pausando e recuperando setores, saída individual e retorno ao lobby pelo último. Resize ativo 1920×1200→960×600 preservou arena/posições e reenquadrou tokens dentro da área reservada do mapa. Usuário confirmou aceite anterior, mas relatou falha física com tokens grandes: reteste da correção e do novo fluxo permanece pendente; não marcar dez contatos físicos como concluídos. Volume preservado, banco de teste parado; próxima implementação será mapa procedural/objetivos da etapa 4 quando solicitada. |
 | 2026-11-01 | Sincronização do canvas por `ResizeObserver` usando `setParentSize` do Phaser em modo RESIZE, corrigindo dimensões antigas após aumentar o contêiner. | Build Docker do jogo e `npm run check:stack` passaram; somente `game` foi republicado. Chromium/CDP confirmou canvas e viewport coincidentes em 960×600 e 1920×1200, arrasto nativo do token de 128 px com raio de toque 64 px, bloqueio/liberação do setor e resize durante partida sem alterar arena/posições canônicas. Mesa de teste devolvida ao lobby vazio, escala 1. Reteste físico continua pendente. |
 | 2026-11-01 | Nome de três letras no token e na calibração; nove marcadores compartilhados de punho, pé em movimento e lâmpada, com estados vazio/preenchido. Conforme decisão do usuário, permanecem vazios até existir uso real dos atributos. Fechar modal usa X vetorial centrado. Retomada exige dez segundos canceláveis, com votos preservados ao desmarcar, reinício em dez e cancelamento por saída/desconexão. | Typecheck, `npm test` (12 contratos + 10 servidor), `npm run build`, integração API/Socket.IO em PostgreSQL isolado e `npm run check:stack` passaram. Servidor/jogo publicados com autorização para encerrar a partida anterior. Navegador verificou nove marcadores vazios nos dois renderizadores, variantes vazias/preenchidas, nome seguindo arrasto nativo a 128 px, X exatamente centrado no botão, retomada 10→8 com posições/relógio congelados, cancelamento preservando outros votos, reinício em dez, recarga invalidando contagem/votos e saída cancelando a contagem. Mesa de teste devolvida ao lobby vazio na escala 1; volume preservado e banco de teste parado. Reteste físico continua sendo a próxima etapa; mapa procedural permanece para quando solicitado. |
+
+| 2026-11-01 | Corrigida tela preta no Chrome em HTTP pela LAN: UUID v4 via `getRandomValues`, identidade por aba preservada e falhas de inicialização exibidas na central. Cinco testes do jogo incluídos no runner principal. | `npm run test -w @terror/game`, `npm run build -w @terror/game`, `npm test` (12 contratos + 10 servidor + 5 jogo), publicação somente de `game` com `--no-deps` e `npm run check:stack` passaram. Navegador em `http://192.168.68.108:8080` confirmou contexto não seguro sem `randomUUID`, conexão, oito setores, mesma identidade após recarga e canvas/viewport/área de rolagem coincidentes em 1200×750 e 2400×1500 CSS, sem erros JavaScript. Armazenamento bloqueado simulado mostrou alerta e indicador vermelho, preservando canvas e setores. Servidor/banco não reiniciados; abertura no tablet físico e dez contatos continuam pendentes. |
 
 Adicionar novas linhas com entregas reais e evidências de validação. Não listar
 como concluídos comportamentos ainda apenas planejados.

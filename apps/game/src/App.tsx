@@ -16,6 +16,7 @@ import { Board, type LayoutSummary, type BoardInteraction } from "./Board.js";
 import { PlayerSector } from "./PlayerSector.js";
 import { TouchButton } from "./TouchButton.js";
 import { PreparationTips } from "./PreparationTips.js";
+import { getClientId } from "./clientIdentity.js";
 
 const isProduction = import.meta.env.APP_NODE_ENV === "production";
 
@@ -39,14 +40,18 @@ export function App() {
   const audioContext = useRef<AudioContext | null>(null);
 
   useEffect(() => {
+    let clientId: string;
+    try {
+      clientId = getClientId();
+    } catch (failure: unknown) {
+      setConnection("error");
+      setError(`Falha ao inicializar a identidade desta aba: ${failure instanceof Error ? failure.message : "armazenamento ou geração aleatória indisponível."}`);
+      return;
+    }
     const controller = new AbortController();
     const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io({
       autoConnect: false,
-      auth: { clientId: sessionStorage.getItem("terror-client-id") ?? (() => {
-        const id = crypto.randomUUID();
-        sessionStorage.setItem("terror-client-id", id);
-        return id;
-      })() },
+      auth: { clientId },
     });
     socketRef.current = socket;
     socket.on("connect", () => setConnection("connected"));
