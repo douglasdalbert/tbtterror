@@ -91,6 +91,7 @@ export const matchSnapshotSchema = z.strictObject({
   players: z.array(matchPlayerSchema).max(8),
   arena: arenaSchema,
   remainingMs: z.number().nonnegative(),
+  resumeRemainingMs: z.number().nonnegative().max(10000),
   simulationMs: z.number().nonnegative(),
   chapter: z.string(),
   error: z.string(),

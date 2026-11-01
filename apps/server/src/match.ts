@@ -17,6 +17,7 @@ export class Match {
   #arena = { width: 1920, height: 1200, scale: 1 };
   #phase: MatchSnapshot["phase"] = "lobby";
   #remainingMs = 0;
+  #resumeRemainingMs = 0;
   #simulationMs = 0;
   #resumePhase: "chapter" | "running" = "running";
   #lastTime: number;
@@ -42,6 +43,7 @@ export class Match {
       players: [...this.#players.values()].sort((a, b) => a.slot - b.slot),
       arena: this.#arena,
       remainingMs: this.#remainingMs,
+      resumeRemainingMs: this.#resumeRemainingMs,
       simulationMs: this.#simulationMs,
       chapter: this.#chapter,
       error: this.#error,
@@ -67,7 +69,10 @@ export class Match {
       player.ready = false;
     }
     if (["chapter", "running"].includes(this.#phase) && this.#players.size > 0) this.#pause();
-    if (this.#phase === "paused") this.#players.forEach((p) => { p.resumeReady = false; });
+    if (this.#phase === "paused") {
+      this.#players.forEach((p) => { p.resumeReady = false; });
+      this.#resumeRemainingMs = 0;
+    }
     if (this.#phase === "countdown") this.#cancelCountdown();
   }
 
@@ -75,7 +80,16 @@ export class Match {
     const time = this.#now();
     const delta = Math.max(0, time - this.#lastTime);
     this.#lastTime = time;
-    if (delta === 0 || this.#phase === "paused" || this.#phase === "lobby") return false;
+    if (delta === 0 || this.#phase === "lobby") return false;
+    if (this.#phase === "paused") {
+      if (this.#resumeRemainingMs === 0) return false;
+      this.#resumeRemainingMs = Math.max(0, this.#resumeRemainingMs - delta);
+      if (this.#resumeRemainingMs === 0) {
+        this.#phase = this.#resumePhase;
+        this.#players.forEach((p) => { p.resumeReady = false; });
+      }
+      return true;
+    }
     if (this.#phase === "running") {
       this.#simulationMs += delta;
       return true;
@@ -169,8 +183,9 @@ export class Match {
         this.#chapter = "";
         this.#error = "";
         this.#remainingMs = 0;
+        this.#resumeRemainingMs = 0;
       } else if (this.#phase === "countdown") this.#cancelCountdown();
-      else if (this.#phase === "paused") this.#tryResume();
+      else if (this.#phase === "paused") this.#resumeRemainingMs = 0;
       return { ok: true };
     }
     if (command.type === "pause") {
@@ -232,14 +247,13 @@ export class Match {
   #pause() {
     this.#resumePhase = this.#phase === "chapter" ? "chapter" : "running";
     this.#phase = "paused";
+    this.#resumeRemainingMs = 0;
     this.#players.forEach((p) => { p.pressed = false; p.resumeReady = false; });
   }
 
   #tryResume() {
     if ([...this.#players.values()].every((p) => p.resumeReady && p.connected)) {
-      this.#phase = this.#resumePhase;
-      this.#lastTime = this.#now();
-      this.#players.forEach((p) => { p.resumeReady = false; });
-    }
+      if (this.#resumeRemainingMs === 0) this.#resumeRemainingMs = 10000;
+    } else this.#resumeRemainingMs = 0;
   }
 }

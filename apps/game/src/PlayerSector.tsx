@@ -4,52 +4,7 @@ import { TouchButton } from "./TouchButton.js";
 import { AttributeIcon, TabIcon } from "./Icons.js";
 import { LetterWheel } from "./LetterWheel.js";
 import { SectorDialog } from "./SectorDialog.js";
-
-function CalibrationToken({ scale, attributes }: {
-  scale: number;
-  attributes: Attributes;
-}) {
-  const groups = [
-    { letter: "F", value: attributes.strength, start: -145, x: 19, y: 19 },
-    { letter: "D", value: attributes.dexterity, start: -25, x: 45, y: 19 },
-    { letter: "I", value: attributes.wisdom, start: 95, x: 32, y: 47 },
-  ];
-  return (
-    <svg
-      className="calibration-token"
-      style={{ width: `${64 * scale}px`, height: `${64 * scale}px` }}
-      viewBox="0 0 64 64"
-      role="img"
-      aria-label={`Token de ${Math.round(64 * scale)} pixels CSS; força ${attributes.strength}, destreza ${attributes.dexterity}, inteligência ${attributes.wisdom}`}
-    >
-      <circle cx="32" cy="32" r="31" fill="#192d3d" stroke="#91a9bc" strokeWidth="1.5" />
-      <circle cx="32" cy="32" r="15" fill="#1678cf" />
-      {groups.map(({ letter, value, start, x, y }) => (
-        <g key={letter} fill="none" strokeLinecap="round" strokeWidth="5">
-          {[0, 1, 2].map((segment) => {
-            const beginning = (start + segment * 20) * Math.PI / 180;
-            const ending = (start + segment * 20 + 13) * Math.PI / 180;
-            const x1 = 32 + 25 * Math.cos(beginning);
-            const y1 = 32 + 25 * Math.sin(beginning);
-            const x2 = 32 + 25 * Math.cos(ending);
-            const y2 = 32 + 25 * Math.sin(ending);
-            return (
-              <path
-                key={segment}
-                d={`M ${x1} ${y1} A 25 25 0 0 1 ${x2} ${y2}`}
-                stroke={segment < value ? "#75d9f4" : "#596777"}
-              />
-            );
-          })}
-          <text x={x} y={y}
-            fill="#e6edf3" stroke="none" fontSize="7" fontWeight="700" textAnchor="middle">
-            {letter}
-          </text>
-        </g>
-      ))}
-    </svg>
-  );
-}
+import { CalibrationToken } from "./TokenVisual.js";
 
 const attributeLabels: { attribute: AttributeName; label: string }[] = [
   { attribute: "strength", label: "Força" },
@@ -160,7 +115,7 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, p
                   <div className="calibration-controls">
                     <TouchButton aria-label={`Diminuir escala compartilhada de ${identity}`}
                       disabled={busy || scale <= 0.5} onPress={() => onScale(-0.05)}>−</TouchButton>
-                    <CalibrationToken scale={scale} attributes={attributes} />
+                    <CalibrationToken scale={scale} name={identity} attributes={attributes} />
                     <TouchButton aria-label={`Aumentar escala compartilhada de ${identity}`}
                       disabled={busy || scale >= 2} onPress={() => onScale(0.05)}>+</TouchButton>
                   </div>

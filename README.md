@@ -40,13 +40,19 @@ Todos prontos iniciam dez segundos regressivos na central; desmarcar qualquer
 prontidão cancela e uma nova confirmação coletiva reinicia em dez. Pontos
 restantes não impedem iniciar, mas atributos/escala/entrada ficam bloqueados
 ao terminar a contagem. Qualquer jogador pode pausar; todos os participantes
-conectados precisam confirmar para retomar. Desconexão de cliente participante
+conectados precisam confirmar para iniciar dez segundos de retomada; desmarcar
+cancela e uma nova confirmação coletiva reinicia em dez. A simulação continua
+congelada durante essa contagem. Desconexão de cliente participante
 pausa; reconectar recupera seus setores e exige nova confirmação coletiva.
 O usuário confirmou o aceite anterior, mas relatou que tokens grandes não
 arrastavam no tablet. A causa identificada foi o círculo de toque não atualizado
 ao redimensionar a zona Phaser; a correção e os novos controles exigem reteste
 físico. Enquanto o próprio token está pressionado, todo o setor fica bloqueado,
 muda para a aba de jogo e mostra caminhada animada com explicação.
+Tokens e calibração mostram o nome de três letras no centro, com três
+marcadores por atributo: punho, pé em movimento e lâmpada. Nesta etapa ficam
+vazios, pois o consumo real dos atributos ainda não está implementado; pontos
+configurados não significam atributos em uso.
 Os tokens dos setores 5 e 7 começam diante de seus próprios setores; os setores
 laterais 4 e 8 foram girados em mais 180° para leitura por quem está fora da mesa.
 As duas dicas verticais externas à central também receberam mais 180°,
@@ -197,7 +203,13 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
 - A dica do walkie-talkie comunica uma regra temática de comunicação entre
   amigos; não exige implementar chat de voz.
 - O SVG do walkie-talkie foi desenhado com base na silhueta anexada pelo usuário.
-  Ícones de atributos e token são SVGs próprios. Controle de jogo e saída usam
+  Ícones de atributos são SVGs próprios. Marcadores do token compartilham os
+  mesmos traçados no Phaser e na calibração: punho e lâmpada redesenhados das
+  referências fornecidas, pé em movimento conforme SVG fornecido pelo usuário.
+  Vazios têm contorno; destreza vazia não tem traços de movimento e inteligência
+  vazia não tem raios. O estado em uso preenche o desenho e adiciona esses traços,
+  mas só será ativado quando existir consumo autoritativo dos atributos.
+  Controle de jogo e saída usam
   os traçados indicados do SVG Silh: [controle](https://svgsilh.com/image/2022084.html)
   e [saída](https://svgsilh.com/image/1152114.html), publicados sob
   [CC0](https://creativecommons.org/publicdomain/zero/1.0/). Os traçados ficam
@@ -432,7 +444,12 @@ docker compose stop
   próprio, sem arte/frases de personagens protegidos.
 - Qualquer jogador pode pausar. Pausa congela posições, relógio de simulação e
   o tempo restante do capítulo; o painel de jogo mostra “Pronto para retomar”.
-  Todos os participantes conectados devem confirmar; desmarcar revoga o voto.
+  Todos os participantes conectados devem confirmar para iniciar dez segundos
+  regressivos na central. A partida continua pausada durante essa contagem,
+  inclusive o tempo do capítulo. Desmarcar cancela para todos, preserva os
+  outros votos e confirmar todos novamente reinicia em dez. Saída cancela a
+  contagem; desconexão também invalida todos os votos. Ao completar os dez
+  segundos, retomar a fase anterior sem descontar esse tempo da simulação.
 - Saída confirmada remove apenas aquele jogador. O último encerra a partida
   e retorna ao lobby. Desconexão mantém jogadores/posições e pausa a partida;
   reconexão não retoma automaticamente. Desconectar observadores não pausa.
@@ -666,12 +683,13 @@ desligado sem interromper jogo/servidor.
 - [x] Escala compartilhada e cálculo da área útil, inclusive em resize.
 - [x] Arrasto com identificação independente de ponteiros.
 - [x] Dicas de preparação nas quatro orientações, incluindo walkie-talkie.
-- [x] Token com disco central e faixas internas de status conforme referência,
+- [x] Token com nome no disco central e marcadores internos por ícones,
   sem ultrapassar o diâmetro calibrado.
 - [x] Setores com abas de token e personagem; controles ativados por ponteiro,
   sem depender de cliques sintetizados em gestos multitoque.
 - [x] Distribuição de três pontos, base 1/1/1 e limites 1–3, com reembolso,
-  contador individual e atualização dos indicadores F/D/I.
+  contador individual. Tokens agora usam nomes e marcadores de uso por ícones,
+  em vez dos antigos indicadores F/D/I de pontos configurados.
 - [x] Quatro dicas externas à central e setores compactos; atributos em quatro
   colunas com ícones, contador +N e destaque verde dos níveis alocados.
 - [x] Remover a instrução textual de arrasto/calibração da preparação.
@@ -698,6 +716,8 @@ e validar fullscreen, áudio e gestos nativos.
 - [x] Posições iniciais distintas na geometria atual, título do capítulo e
   início sincronizado; mapa procedural/objetivos permanecem na etapa 4.
 - [x] Pausa/retomada coletiva e reconexão à partida ativa.
+- [x] Contagem de dez segundos para retomada, cancelável e reiniciada do início,
+  sem avançar a simulação ou o tempo do capítulo.
 - [x] Configuração bloqueada após contagem, mesmo com pontos não distribuídos.
 - [x] Bloqueio central de ações pelo próprio token pressionado, animação no
   setor e atualização da área de toque ao mudar escala.
@@ -813,6 +833,7 @@ sem duplicar controladores ou expor informações ocultas.
 | 2026-11-01 | Setores com duas colunas verticais e painel central; rodas de três letras com nomes únicos locais; jogo vazio ao entrar; confirmação de saída; atributos por ícones, +N verde, níveis alocados verdes, modais e alerta reutilizável. Calibração sem multiplicador, walkie-talkie baseado na referência e ícones CC0 de jogo/saída. Campo `wisdom` com migração 003 preservando conteúdo. | `npm run typecheck`, `npm test` (11 contratos + 3 servidor), `npm run build`, integração PostgreSQL isolada pelo perfil `test`, publicação de servidor/jogo e `npm run check:stack` passaram. Navegador confirmou duplicidade/reentrada, distribuição e reembolso, alerta, modais, cancelamento da saída, teclado/mouse e arrasto/toque das letras sem clique duplicado ao soltar sobre a seta. Em 1920×1200 e 960×600 CSS, escalas 1/2, oito setores não cortam controles nem se sobrepõem; abas e saída medem 32×32 px. Profundidade passou de 152/184 para 116/140 px, liberando 13%/17% de área útil em 1920×1200. Teste misto confirmou oito arrastos por eventos Phaser com dois controles por toque CDP; o ensaio inteiramente nativo não comprovou os arrastos e não substitui aceite físico. Volume preservado e PostgreSQL de teste parado. Próxima etapa permanece o aceite no tablet, especialmente alvos menores, dez contatos, fullscreen e áudio. |
 | 2026-11-01 | Saída reposicionada abaixo do nome. Corrigido círculo de toque antigo ao aumentar tokens; setor bloqueado pelo próprio token pressionado, com troca para jogo e caminhada animada. Etapa 3 no servidor: participantes/posições/atributos/escala em memória, prontidão alternável, contagem central de dez segundos, cancelamento/reinício, posições distintas em células da prévia, capítulo próprio, configuração bloqueada mesmo com pontos livres, pausa e retomada coletiva, reconexão e saída individual/último encerra. | `npm run typecheck`, `npm test` (12 contratos + 8 servidor), `npm run build`, integração API/Socket.IO em PostgreSQL isolado, builds Docker e `npm run check:stack` passaram. Chromium/CDP confirmou arrasto nativo de oito tokens a 128 px, bloqueio dos oito setores e liberação ao cancelar; dez contatos nativos com seis tokens e quatro controles de dois jogadores parados distribuíram pontos sem bloquear os arrastos. Navegador confirmou 10→8, cancelamento e reinício em 10, capítulo e início com pontos sobrando, edição desabilitada, pausa congelando exatamente posições/relógio, retomada com todos, recarga pausando e recuperando setores, saída individual e retorno ao lobby pelo último. Resize ativo 1920×1200→960×600 preservou arena/posições e reenquadrou tokens dentro da área reservada do mapa. Usuário confirmou aceite anterior, mas relatou falha física com tokens grandes: reteste da correção e do novo fluxo permanece pendente; não marcar dez contatos físicos como concluídos. Volume preservado, banco de teste parado; próxima implementação será mapa procedural/objetivos da etapa 4 quando solicitada. |
 | 2026-11-01 | Sincronização do canvas por `ResizeObserver` usando `setParentSize` do Phaser em modo RESIZE, corrigindo dimensões antigas após aumentar o contêiner. | Build Docker do jogo e `npm run check:stack` passaram; somente `game` foi republicado. Chromium/CDP confirmou canvas e viewport coincidentes em 960×600 e 1920×1200, arrasto nativo do token de 128 px com raio de toque 64 px, bloqueio/liberação do setor e resize durante partida sem alterar arena/posições canônicas. Mesa de teste devolvida ao lobby vazio, escala 1. Reteste físico continua pendente. |
+| 2026-11-01 | Nome de três letras no token e na calibração; nove marcadores compartilhados de punho, pé em movimento e lâmpada, com estados vazio/preenchido. Conforme decisão do usuário, permanecem vazios até existir uso real dos atributos. Fechar modal usa X vetorial centrado. Retomada exige dez segundos canceláveis, com votos preservados ao desmarcar, reinício em dez e cancelamento por saída/desconexão. | Typecheck, `npm test` (12 contratos + 10 servidor), `npm run build`, integração API/Socket.IO em PostgreSQL isolado e `npm run check:stack` passaram. Servidor/jogo publicados com autorização para encerrar a partida anterior. Navegador verificou nove marcadores vazios nos dois renderizadores, variantes vazias/preenchidas, nome seguindo arrasto nativo a 128 px, X exatamente centrado no botão, retomada 10→8 com posições/relógio congelados, cancelamento preservando outros votos, reinício em dez, recarga invalidando contagem/votos e saída cancelando a contagem. Mesa de teste devolvida ao lobby vazio na escala 1; volume preservado e banco de teste parado. Reteste físico continua sendo a próxima etapa; mapa procedural permanece para quando solicitado. |
 
 Adicionar novas linhas com entregas reais e evidências de validação. Não listar
 como concluídos comportamentos ainda apenas planejados.

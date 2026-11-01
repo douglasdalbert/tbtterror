@@ -129,6 +129,18 @@ test("API, migrations, frozen configuration, login-free admin and socket reconne
   assert.deepEqual(await command({ type: "resume", slot: 0, value: true }), { ok: true });
   assert.equal(match.snapshot().phase, "paused");
   assert.deepEqual(await command({ type: "resume", slot: 1, value: true }), { ok: true });
+  assert.equal(match.snapshot().phase, "paused");
+  assert.equal(match.snapshot().resumeRemainingMs, 10000);
+  clock += 3000;
+  match.tick();
+  assert.equal(match.snapshot().resumeRemainingMs, 7000);
+  assert.deepEqual(await command({ type: "resume", slot: 0, value: false }), { ok: true });
+  assert.equal(match.snapshot().resumeRemainingMs, 0);
+  assert.equal(match.snapshot().players[1]?.resumeReady, true);
+  assert.deepEqual(await command({ type: "resume", slot: 0, value: true }), { ok: true });
+  assert.equal(match.snapshot().resumeRemainingMs, 10000);
+  clock += 10000;
+  match.tick();
   assert.equal(match.snapshot().phase, "running");
   assert.deepEqual(await command({ type: "leave", slot: 0 }), { ok: true });
   assert.deepEqual(await command({ type: "leave", slot: 1 }), { ok: true });

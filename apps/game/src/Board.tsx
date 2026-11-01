@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import Phaser from "phaser";
 import { boardArea, hexCorners, terrainLayout, tokenHitCircle, initialTokenPosition, type Catalog, type MatchSnapshot, type MatchCommand } from "@terror/contracts";
+import { tokenMarkerPositions, tokenMarkerShapes } from "./TokenVisual.js";
 
 export interface LayoutSummary {
   terrains: number;
@@ -33,7 +34,8 @@ class TerrainPreviewScene extends Phaser.Scene {
   #positions = new Map<number, Position>();
   #zones = new Map<number, Phaser.GameObjects.Zone>();
   #zoneDiameters = new Map<number, number>();
-  #labels = new Map<number, Phaser.GameObjects.Text[]>();
+  #labels = new Map<number, Phaser.GameObjects.Text>();
+  #markers = new Map<number, Phaser.GameObjects.Image[]>();
   #dragging = new Map<number, { slot: number; offsetX: number; offsetY: number }>();
   #snapshot: MatchSnapshot | undefined;
   #interaction: BoardInteraction | undefined;
@@ -42,6 +44,7 @@ class TerrainPreviewScene extends Phaser.Scene {
   create() {
     this.#graphics = this.add.graphics();
     this.#tokenGraphics = this.add.graphics();
+    this.createMarkerTextures();
     this.#scale = this.registry.get("previewScale");
     this.#players = this.registry.get("previewPlayers") ?? [];
     this.#snapshot = this.registry.get("matchSnapshot");
@@ -177,8 +180,10 @@ class TerrainPreviewScene extends Phaser.Scene {
       this.#zones.delete(slot);
       this.#zoneDiameters.delete(slot);
       this.#positions.delete(slot);
-      this.#labels.get(slot)?.forEach((label) => label.destroy());
+      this.#labels.get(slot)?.destroy();
       this.#labels.delete(slot);
+      this.#markers.get(slot)?.forEach((marker) => marker.destroy());
+      this.#markers.delete(slot);
     }
     for (const [pointerId, drag] of this.#dragging) {
       if (!activeSlots.has(drag.slot)) {
@@ -188,7 +193,7 @@ class TerrainPreviewScene extends Phaser.Scene {
     }
 
     for (const player of this.#players) {
-      const { slot, attributes } = player;
+      const { slot, name } = player;
       const diameter = layout.tokenDiameter;
       const position = this.#positions.get(slot);
       if (!position) {
@@ -203,26 +208,8 @@ class TerrainPreviewScene extends Phaser.Scene {
       tokenGraphics.fillCircle(center.x, center.y, diameter * 0.24);
       tokenGraphics.lineStyle(Math.max(1, diameter * 0.025), 0x84a8c1, 0.9);
       tokenGraphics.strokeCircle(center.x, center.y, diameter * 0.49);
-      const groupStarts = [-2.57, -0.48, 1.62];
-      const values = [attributes.strength, attributes.dexterity, attributes.wisdom];
-      for (let group = 0; group < values.length; group++) {
-        const groupStart = groupStarts[group];
-        const value = values[group];
-        if (groupStart === undefined || value === undefined) continue;
-        for (let segment = 0; segment < 3; segment++) {
-          const start = groupStart + segment * 0.4;
-          tokenGraphics.lineStyle(
-            Math.max(1, diameter * 0.045),
-            segment < value ? 0x75d9f4 : 0x596777,
-            segment < value ? 0.95 : 0.45,
-          );
-          tokenGraphics.beginPath();
-          tokenGraphics.arc(center.x, center.y, diameter * 0.39, start, start + 0.27);
-          tokenGraphics.strokePath();
-        }
-      }
-
-      this.updateLabels(slot, center, diameter);
+      this.updateMarkers(slot, center, diameter);
+      this.updateLabels(slot, name, center, diameter);
       this.updateZone(slot, center, diameter);
     }
 
@@ -268,24 +255,63 @@ class TerrainPreviewScene extends Phaser.Scene {
     };
   }
 
-  private updateLabels(slot: number, center: Position, diameter: number) {
-    let labels = this.#labels.get(slot);
-    if (!labels) {
-      labels = ["F", "D", "I"].map((letter) =>
-        this.add.text(0, 0, letter, {
+  private createMarkerTextures() {
+    for (const attribute of ["strength", "dexterity", "wisdom"] as const) {
+      for (const used of [false, true]) {
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 100;
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("Não foi possível desenhar os indicadores do token.");
+        context.lineWidth = 4;
+        context.lineCap = "round";
+        context.lineJoin = "round";
+        context.strokeStyle = context.fillStyle = "#75d9f4";
+        const { body, details, activeExtras } = tokenMarkerShapes[attribute];
+        const shape = new Path2D(body);
+        if (used) context.fill(shape);
+        context.stroke(shape);
+        if (details && (used || attribute === "strength")) {
+          context.strokeStyle = used ? "#192d3d" : "#75d9f4";
+          context.stroke(new Path2D(details));
+        }
+        if (used && activeExtras) {
+          context.strokeStyle = "#75d9f4";
+          const extras = new Path2D(activeExtras);
+          if (attribute === "dexterity") context.fill(extras);
+          context.stroke(extras);
+        }
+        this.textures.addCanvas(`token-marker-${attribute}-${used ? "used" : "empty"}`, canvas);
+      }
+    }
+  }
+
+  private updateMarkers(slot: number, center: Position, diameter: number) {
+    const positions = tokenMarkerPositions();
+    let markers = this.#markers.get(slot);
+    if (!markers) {
+      markers = positions.map(({ attribute }) => this.add.image(0, 0, `token-marker-${attribute}-empty`));
+      this.#markers.set(slot, markers);
+    }
+    positions.forEach(({ x, y }, index) => {
+      markers[index]?.setPosition(center.x + (x - 32) * diameter / 64, center.y + (y - 32) * diameter / 64)
+        .setDisplaySize(diameter * 8.5 / 64, diameter * 8.5 / 64);
+    });
+  }
+
+  private updateLabels(slot: number, name: string, center: Position, diameter: number) {
+    let label = this.#labels.get(slot);
+    if (!label) {
+      label = this.add.text(0, 0, name, {
           fontFamily: "system-ui, sans-serif",
           fontSize: "8px",
           color: "#e6edf3",
           fontStyle: "bold",
-        }).setOrigin(0.5),
-      );
-      this.#labels.set(slot, labels);
+        }).setOrigin(0.5);
+      this.#labels.set(slot, label);
     }
-    const offset = diameter * 0.105;
-    labels.forEach((label, index) => {
-      label.setPosition(center.x + (index - 1) * offset, center.y);
-      label.setFontSize(Math.max(6, diameter * 0.125));
-    });
+    label.setText(name);
+    label.setPosition(center.x, center.y);
+    label.setFontSize(Math.max(6, diameter * 0.125));
   }
 
   private updateZone(slot: number, center: Position, diameter: number) {

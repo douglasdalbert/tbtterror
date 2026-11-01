@@ -83,9 +83,13 @@ test("lobby snapshots cannot accidentally include hidden world data", () => {
     phase: "lobby",
     catalogRevision: 1,
     players: [], arena: { width: 1920, height: 1200, scale: 1 },
-    remainingMs: 0, simulationMs: 0, chapter: "", error: "", controlSlots: [],
+    remainingMs: 0, resumeRemainingMs: 0, simulationMs: 0, chapter: "", error: "", controlSlots: [],
   };
   assert.equal(matchSnapshotSchema.safeParse(snapshot).success, true);
+  assert.equal(matchSnapshotSchema.safeParse({ ...snapshot, phase: "paused", resumeRemainingMs: 10000 }).success, true);
+  for (const resumeRemainingMs of [-1, 10001, Infinity]) {
+    assert.equal(matchSnapshotSchema.safeParse({ ...snapshot, resumeRemainingMs }).success, false);
+  }
   assert.equal(matchSnapshotSchema.safeParse({ ...snapshot, monsterPosition: [1, 2] }).success, false);
 });
 

@@ -233,6 +233,8 @@ export function App() {
             <p>{configuring ? "Preparação" : snapshot.phase === "paused" ? "Pausado" : "Partida"} · {snapshot.players.length}/8 jogadores</p>
           )}
           {snapshot?.phase === "countdown" && <output className="countdown" aria-label="Contagem para início">{Math.ceil(snapshot.remainingMs / 1000)}</output>}
+          {snapshot?.phase === "paused" && snapshot.resumeRemainingMs > 0 &&
+            <output className="countdown" aria-label="Contagem para retomada">{Math.ceil(snapshot.resumeRemainingMs / 1000)}</output>}
           {(snapshot?.phase === "chapter" || (snapshot?.phase === "paused" && snapshot.remainingMs > 0)) &&
             <p className="chapter-title" style={{ opacity: Math.min(1, snapshot.remainingMs / 1000) }}>{snapshot.chapter}</p>}
           {!isProduction && layout && <p className="note preview-summary">Prévia · {layout.terrains} terrenos · token {Math.round(layout.tokenDiameter)} px</p>}
