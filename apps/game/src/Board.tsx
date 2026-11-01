@@ -155,7 +155,7 @@ class TerrainPreviewScene extends Phaser.Scene {
       tokenGraphics.lineStyle(Math.max(1, diameter * 0.025), 0x84a8c1, 0.9);
       tokenGraphics.strokeCircle(center.x, center.y, diameter * 0.49);
       const groupStarts = [-2.57, -0.48, 1.62];
-      const values = [attributes.strength, attributes.dexterity, attributes.intelligence];
+      const values = [attributes.strength, attributes.dexterity, attributes.wisdom];
       for (let group = 0; group < values.length; group++) {
         const groupStart = groupStarts[group];
         const value = values[group];

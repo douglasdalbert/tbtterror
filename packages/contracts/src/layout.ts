@@ -33,7 +33,7 @@ export function hexCorners(center: Point, radius: number): Point[] {
 }
 
 export function playerSectorDepth(scale: number): number {
-  return Math.max(152, cellDimensions(scale).tokenDiameter + 56);
+  return Math.max(116, cellDimensions(scale).tokenDiameter + 12);
 }
 
 export function boardArea(width: number, height: number, scale = 1) {

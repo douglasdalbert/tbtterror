@@ -25,10 +25,15 @@ personagem, calibração compartilhada, prévia do token e arrasto por ponteiros
 independentes.
 Fullscreen e áudio são autorizados por interação; quatro dicas orientadas ficam
 fora da caixa central, uma em cada lado, sem ocupar os setores. Cada setor
-ocupado tem abas com ícones de token (calibração) e
-cabeça (definição de personagem), à esquerda de Sair; o label Setor X permanece
-no cabeçalho. Não há seletor nativo: o jogador distribui três pontos entre força,
-destreza e inteligência, partindo de 1 em cada atributo. As definições e posições ainda são locais ao
+ocupado tem duas colunas verticais: nome/saída à esquerda e abas de jogo,
+token e personagem à direita, com painel central compacto. A entrada escolhe
+três letras (AAA inicialmente), sem duplicar nomes na mesma mesa; abre a aba
+de jogo, ainda vazia. Saída exige confirmação no próprio setor. Atributos usam
+ícones com explicação provisória em modal interno, contador verde +3/+2/+1/+0 e
+alerta vermelho na aba enquanto faltam pontos a distribuir. O jogador distribui
+três pontos entre força, destreza e inteligência, partindo de 1 em cada atributo.
+Os campos ingleses são `strength`, `dexterity` e `wisdom`.
+As definições, nomes e posições ainda são locais ao
 navegador; o servidor continua mantendo apenas o lobby, sem prontidão, partida
 ativa ou pausa. O usuário confirmou acesso LAN, calibração comum e arrasto de
 todos os tokens no tablet. O bloqueio dos controles durante o arrasto foi
@@ -50,7 +55,8 @@ instrução textual sobre arrastar e calibrar foi removida da preparação.
 dez contatos simultâneos entre tokens e controles, agora com abas e controles
 por ponteiro, sem scroll/zoom involuntário, fullscreen, áudio e cancelamento.
 A interface permanece sem a instrução textual de arrasto; só depois do aceite
-físico avançar para início da partida e pausa.
+físico avançar para início da partida e pausa. Revalidar os setores compactos,
+as rodas de letras, os modais e os alvos de toque menores no dispositivo real.
 
 **Primeiro marco jogável:** entrada dos jogadores, calibração compartilhada,
 tokens com movimento simultâneo e obstáculos simples no tablet real.
@@ -117,7 +123,19 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
 - Tablet de referência: 1920 × 1200, com suporte físico a pelo menos 10 toques.
   Não assumir resolução fixa nem confundir pixels CSS com pixels físicos.
 - Oito setores: três acima, três abaixo e um em cada lateral.
-- O jogador entra pelo próprio setor, escolhe personagem e confirma prontidão.
+- O jogador entra pelo próprio setor, escolhe um nome de três letras maiúsculas
+  de A a Z, começando em AAA. As rodas reutilizáveis aceitam botões, arrasto,
+  roda do mouse e setas do teclado, com volta entre A/Z. Nomes duplicados são
+  rejeitados atomicamente no estado local da mesa, inclusive em entradas
+  simultâneas. Sincronização de participantes entre clientes fica para a etapa 3.
+- Após entrar, a aba de jogo abre vazia. Nome e saída ficam à esquerda; jogo,
+  calibração e atributos ficam à direita, em colunas verticais de botões de
+  32 px CSS. O botão de saída tem o mesmo tamanho das abas e exige confirmação.
+  Prontidão ainda não está implementada.
+- Modais cobrem somente o próprio setor, com fechamento por botão ou Escape,
+  foco de teclado contido e controles de fundo inativos. Erros de entrada/ação
+  mudam apenas a borda para vermelho; detalhes são anunciados por `role=alert`
+  sem texto visível adicional nem alteração do fundo.
 - Um círculo de calibração, incluindo a borda de indicadores, permite ajustar
   o tamanho para o dedo e a visualização.
 - O multiplicador é compartilhado: quando alguém ajusta, todos os tokens e
@@ -131,10 +149,13 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
 - Primeiro calcular a célula; depois encaixar componentes completos de sete
   células na área útil. Nunca reduzir células automaticamente para caber mais.
 - A prévia usa uma malha de componentes sem células sobrepostas e apenas
-  componentes inteiros. Os setores reservam profundidade de `max(152, 64s + 56)`
+  componentes inteiros. Os setores reservam profundidade de `max(116, 64s + 12)`
   pixels CSS, limitada a 18% da largura nas laterais e 30% da altura acima/abaixo.
   A reserva acompanha a escala sem reduzir células; telas pequenas podem não
   comportar a prévia, com aviso explícito.
+- O comprimento dos setores laterais é limitado a 480 px CSS, 54% da altura e
+  ao vão entre setores superiores/inferiores menos 12 px, evitando sobreposição.
+- A calibração mostra o token e botões +/−, sem exibir o valor do multiplicador.
 - A escala da prévia vai de 0,5× a 2×, sem recriar o canvas. Esse intervalo ainda
   não é uma regra definitiva nem está sincronizado com o servidor.
 - Sobras são fundo do `body` com névoa decorativa, visto pelo canvas transparente.
@@ -159,6 +180,16 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
   - “Caso você esteja no estado ‘dormindo’, poderá ser acordado por outro jogador.”
 - A dica do walkie-talkie comunica uma regra temática de comunicação entre
   amigos; não exige implementar chat de voz.
+- O SVG do walkie-talkie foi desenhado com base na silhueta anexada pelo usuário.
+  Ícones de atributos e token são SVGs próprios. Controle de jogo e saída usam
+  os traçados indicados do SVG Silh: [controle](https://svgsilh.com/image/2022084.html)
+  e [saída](https://svgsilh.com/image/1152114.html), publicados sob
+  [CC0](https://creativecommons.org/publicdomain/zero/1.0/). Os traçados ficam
+  incorporados em [Icons.tsx](./apps/game/src/Icons.tsx), sem requisições externas.
+- O botão compartilhado aceita mouse iniciado no próprio botão, teclado e
+  toque por ponteiro. Ignora cliques sintetizados que sejam redirecionados de
+  um arrasto iniciado em outro controle, evitando avançar duas letras ao
+  soltar a roda sobre uma seta.
 
 ## Executar a base técnica
 
@@ -413,11 +444,20 @@ docker compose stop
 - Força, destreza e inteligência possuem níveis entre 1 e 3. Destreza substitui
   o antigo nome do atributo velocidade, inclusive na variável `dexterity` e
   nos contratos; “velocidade” continua designando a medida física do movimento.
+- Em inglês, usar `strength`, `dexterity` e `wisdom`. A interface portuguesa
+  mantém “Inteligência”; a migração 003 renomeia `intelligence` para `wisdom`
+  no conteúdo persistido, preservando níveis e sem editar migrações aplicadas.
 - Cada jogador entra com força 1, destreza 1 e inteligência 1, e três pontos
   disponíveis na aba de personagem. Cada “+” consome um ponto; “−” devolve um.
   Não baixar de 1, ultrapassar 3 ou gastar mais de três pontos. Exemplos de
   distribuição completa: 3/2/1 e 2/2/2. Pontos ainda livres ficam explicitamente
   indicados; prontidão e sua validação pertencem à etapa 3.
+- O painel tem quatro colunas: contador +N verde grande e força, destreza,
+  inteligência. Braço musculoso, tênis em movimento e cérebro substituem os
+  textos; tocar no ícone abre título e lorem ipsum em modal interno fechável.
+  Níveis 2/3 ficam verdes. O componente `TouchButton` oferece um indicador
+  vermelho absoluto no canto superior direito, usado na aba de atributos
+  enquanto houver pontos livres, sem depender de um texto visível.
 - A distribuição é independente por jogador e atualiza o token de calibração
   e o token no tabuleiro. Não grava movimentos/definições locais no PostgreSQL.
 - A proposta associa força a sons emitidos, destreza a cansaço e inteligência
@@ -582,9 +622,14 @@ desligado sem interromper jogo/servidor.
   sem depender de cliques sintetizados em gestos multitoque.
 - [x] Distribuição local de três pontos, base 1/1/1 e limites 1–3, com reembolso,
   contador individual e atualização dos indicadores F/D/I.
-- [x] Quatro dicas externas à central e setores compactos; atributos laterais
-  organizados em linhas nas telas de menor altura para não cortar controles.
+- [x] Quatro dicas externas à central e setores compactos; atributos em quatro
+  colunas com ícones, contador +N e destaque verde dos níveis alocados.
 - [x] Remover a instrução textual de arrasto/calibração da preparação.
+- [x] Duas colunas verticais de navegação, jogo vazio inicial, calibração sem
+  multiplicador e confirmação de saída no setor.
+- [x] Rodas de três letras, nomes únicos locais, borda de erro e modais internos.
+- [x] Indicador de alerta reutilizável no botão e SVG de walkie-talkie baseado
+  na referência fornecida pelo usuário.
 
 **Aceite:** pelo menos dez contatos simultâneos no dispositivo real, incluindo
 tokens e controles, sem roubar gestos; ajustar um círculo escala todos; não há
@@ -594,6 +639,7 @@ seletor e de +/− durante o arrasto. Após substituir o seletor por abas e trat
 controles por ponteiro, Chromium/CDP validou oito tokens e dois controles
 simultâneos, troca de aba, toque sem duplicação e cancelamento. Ainda pendente:
 repetir esse cenário no tablet, incluindo os novos controles de atributos,
+nomes de três letras, duas colunas de navegação e modais internos,
 e validar fullscreen, áudio e gestos nativos.
 
 ### 3. Início, capítulo e pausa
@@ -709,6 +755,7 @@ sem duplicar controladores ou expor informações ocultas.
 | 2026-11-01 | Texto de status da conexão substituído por indicador circular verde/amarelo/vermelho no cabeçalho central, com nome acessível e feedback de erro preservado. | Build do jogo e publicação somente de `game` passaram. Navegador confirmou conexão pendente (amarelo), falha simulada com alerta (vermelho) e recuperação (verde), sem texto visível no indicador. Próxima etapa permanece o aceite físico da mesa. |
 | 2026-11-01 | Revisão removida da central; `NODE_ENV` ligado ao servidor/build do jogo e resumo de prévia restrito a não produção. Áudio/tela cheia em sobreposição central, visível somente enquanto algum deles não está ativo, com acompanhamento de mudanças do áudio. | Typecheck, build local e builds Docker nos dois ambientes passaram. Navegador confirmou presença/ausência da prévia em development/production, botão central acima da interface mesmo com conexão em erro e ocultação/reaparecimento com APIs simuladas de áudio/tela cheia. Teste nativo não concluiu na página compartilhada oculta; reteste físico pendente. Ambiente development restaurado, volume preservado e `check:stack` aprovado; próxima etapa permanece o aceite da mesa. |
 | 2026-11-01 | Instrução textual de arrasto e calibração removida da preparação para reduzir texto na interface do jogo. | Validado build de `@terror/game` e busca confirmando que a frase não permanece no código. Próxima etapa continua sendo o aceite físico da mesa. |
+| 2026-11-01 | Setores com duas colunas verticais e painel central; rodas de três letras com nomes únicos locais; jogo vazio ao entrar; confirmação de saída; atributos por ícones, +N verde, níveis alocados verdes, modais e alerta reutilizável. Calibração sem multiplicador, walkie-talkie baseado na referência e ícones CC0 de jogo/saída. Campo `wisdom` com migração 003 preservando conteúdo. | `npm run typecheck`, `npm test` (11 contratos + 3 servidor), `npm run build`, integração PostgreSQL isolada pelo perfil `test`, publicação de servidor/jogo e `npm run check:stack` passaram. Navegador confirmou duplicidade/reentrada, distribuição e reembolso, alerta, modais, cancelamento da saída, teclado/mouse e arrasto/toque das letras sem clique duplicado ao soltar sobre a seta. Em 1920×1200 e 960×600 CSS, escalas 1/2, oito setores não cortam controles nem se sobrepõem; abas e saída medem 32×32 px. Profundidade passou de 152/184 para 116/140 px, liberando 13%/17% de área útil em 1920×1200. Teste misto confirmou oito arrastos por eventos Phaser com dois controles por toque CDP; o ensaio inteiramente nativo não comprovou os arrastos e não substitui aceite físico. Volume preservado e PostgreSQL de teste parado. Próxima etapa permanece o aceite no tablet, especialmente alvos menores, dez contatos, fullscreen e áudio. |
 
 Adicionar novas linhas com entregas reais e evidências de validação. Não listar
 como concluídos comportamentos ainda apenas planejados.

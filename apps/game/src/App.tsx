@@ -4,11 +4,11 @@ import {
   catalogSchema,
   matchSnapshotSchema,
   parseApiResponse,
-  allocateAttributePoint,
-  initialPlayerAttributes,
-  playerAttributesSchema,
+  enterPreparationPlayer,
+  leavePreparationPlayer,
+  changePreparationAttribute,
   playerSectorDepth,
-  type Attributes,
+  type PreparationState,
   type AttributeName,
   type Catalog,
   type MatchSnapshot,
@@ -32,8 +32,8 @@ export function App() {
   const [audioReady, setAudioReady] = useState(false);
   const [scale, setScale] = useState(1);
   const [layout, setLayout] = useState<LayoutSummary>();
-  const [selectionState, setSelectionState] = useState<{ players: Record<number, Attributes>; error: string }>({
-    players: {}, error: "",
+  const [selectionState, setSelectionState] = useState<PreparationState>({
+    players: {}, errors: {},
   });
   const selections = selectionState.players;
   const [hintIndex, setHintIndex] = useState(0);
@@ -133,23 +133,11 @@ export function App() {
   }
 
   function changeAttribute(slot: number, attribute: AttributeName, delta: 1 | -1) {
-    setSelectionState((current) => {
-      const attributes = current.players[slot];
-      if (!attributes) return { ...current, error: "Não é possível editar um setor vazio." };
-      const proposed = playerAttributesSchema.safeParse({
-        ...attributes, [attribute]: attributes[attribute] + delta,
-      });
-      if (!proposed.success) {
-        return { ...current, error: `Setor ${slot + 1}: respeite os níveis de 1 a 3 e os três pontos disponíveis.` };
-      }
-      return {
-        players: { ...current.players, [slot]: allocateAttributePoint(attributes, attribute, delta) }, error: "",
-      };
-    });
+    setSelectionState((current) => changePreparationAttribute(current, slot, attribute, delta));
   }
 
-  const previewPlayers = useMemo(() => Object.entries(selections).map(([slot, attributes]) => ({
-    slot: Number(slot), name: `Jogador ${Number(slot) + 1}`, attributes,
+  const previewPlayers = useMemo(() => Object.entries(selections).map(([slot, player]) => ({
+    slot: Number(slot), ...player,
   })), [selections]);
 
   return (
@@ -160,17 +148,16 @@ export function App() {
           <PlayerSector
             key={slot}
             slot={slot}
-            attributes={selections[slot]}
+            attributes={selections[slot]?.attributes}
+            name={selections[slot]?.name}
+            error={selectionState.errors[slot] || ""}
             canEnter={catalog !== undefined}
             scale={scale}
-            onEnter={() => setSelectionState((current) => ({
-              players: { ...current.players, [slot]: initialPlayerAttributes() }, error: "",
+            onEnter={(name) => setSelectionState((current) => enterPreparationPlayer(current, slot, name))}
+            onLeave={() => setSelectionState((current) => leavePreparationPlayer(current, slot))}
+            onClearError={() => setSelectionState((current) => ({
+              ...current, errors: { ...current.errors, [slot]: "" },
             }))}
-            onLeave={() => setSelectionState((current) => {
-              const updated = { ...current.players };
-              delete updated[slot];
-              return { players: updated, error: "" };
-            })}
             onAttribute={(attribute, delta) => changeAttribute(slot, attribute, delta)}
             onScale={changeScale}
           />
@@ -194,7 +181,6 @@ export function App() {
           )}
           {!isProduction && layout && <p className="note preview-summary">Prévia · {layout.terrains} terrenos · token {Math.round(layout.tokenDiameter)} px</p>}
           {layout?.terrains === 0 && <p role="alert" className="error">Não cabe um terreno completo nesta escala.</p>}
-          {selectionState.error && <p role="alert" className="error">{selectionState.error}</p>}
         </section>
       </div>
       {(!fullscreen || !audioReady) && (

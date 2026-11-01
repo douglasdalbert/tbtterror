@@ -3,33 +3,66 @@ import { test } from "node:test";
 import {
   allocateAttributePoint, attributesSchema, availableAttributePoints, initialPlayerAttributes,
   matchSnapshotSchema, parseApiResponse, playerAttributesSchema, settingsSchema,
+  enterPreparationPlayer, leavePreparationPlayer, changePreparationAttribute, rotatePlayerName, type PreparationState,
 } from "./index.js";
 import { boardArea, cellDimensions, hexCorners, terrainLayout } from "./layout.js";
 
 test("attributes reject out-of-range values and unknown properties", () => {
-  assert.equal(attributesSchema.safeParse({ strength: 0, dexterity: 2, intelligence: 2 }).success, false);
-  assert.equal(attributesSchema.safeParse({ strength: 2, dexterity: 4, intelligence: 2 }).success, false);
-  assert.equal(attributesSchema.safeParse({ strength: 2, dexterity: 2, intelligence: 2, extra: true }).success, false);
-  assert.equal(attributesSchema.safeParse({ strength: 2, dexterity: 2, intelligence: 2 }).success, true);
+  assert.equal(attributesSchema.safeParse({ strength: 0, dexterity: 2, wisdom: 2 }).success, false);
+  assert.equal(attributesSchema.safeParse({ strength: 2, dexterity: 4, wisdom: 2 }).success, false);
+  assert.equal(attributesSchema.safeParse({ strength: 2, dexterity: 2, wisdom: 2, extra: true }).success, false);
+  assert.equal(attributesSchema.safeParse({ strength: 2, dexterity: 2, wisdom: 2 }).success, true);
   assert.equal(attributesSchema.safeParse({ strength: 2, speed: 2, intelligence: 2 }).success, false);
+  assert.equal(attributesSchema.safeParse({ strength: 2, dexterity: 2, intelligence: 2 }).success, false);
 });
 
 test("players start at one and can allocate and refund exactly three points", () => {
   const initial = initialPlayerAttributes();
-  assert.deepEqual(initial, { strength: 1, dexterity: 1, intelligence: 1 });
+  assert.deepEqual(initial, { strength: 1, dexterity: 1, wisdom: 1 });
   assert.equal(availableAttributePoints(initial), 3);
   const strength2 = allocateAttributePoint(initial, "strength", 1);
   const strength3 = allocateAttributePoint(strength2, "strength", 1);
   const allocated = allocateAttributePoint(strength3, "dexterity", 1);
-  assert.deepEqual(allocated, { strength: 3, dexterity: 2, intelligence: 1 });
+  assert.deepEqual(allocated, { strength: 3, dexterity: 2, wisdom: 1 });
   assert.equal(availableAttributePoints(allocated), 0);
-  assert.throws(() => allocateAttributePoint(allocated, "intelligence", 1));
+  assert.throws(() => allocateAttributePoint(allocated, "wisdom", 1));
   assert.throws(() => allocateAttributePoint(strength3, "strength", 1));
-  assert.throws(() => allocateAttributePoint(initial, "intelligence", -1));
+  assert.throws(() => allocateAttributePoint(initial, "wisdom", -1));
   assert.equal(availableAttributePoints(allocateAttributePoint(allocated, "strength", -1)), 1);
-  assert.equal(availableAttributePoints({ strength: 2, dexterity: 2, intelligence: 2 }), 0);
-  assert.equal(playerAttributesSchema.safeParse({ strength: 3, dexterity: 3, intelligence: 3 }).success, false);
+  assert.equal(availableAttributePoints({ strength: 2, dexterity: 2, wisdom: 2 }), 0);
+  assert.equal(playerAttributesSchema.safeParse({ strength: 3, dexterity: 3, wisdom: 3 }).success, false);
   assert.deepEqual(initial, initialPlayerAttributes());
+});
+
+test("three-letter names rotate, wrap and reject invalid inputs", () => {
+  assert.equal(rotatePlayerName("AAA", 0, -1), "ZAA");
+  assert.equal(rotatePlayerName("AZA", 1, 1), "AAA");
+  assert.equal(rotatePlayerName(rotatePlayerName("AAA", 0, 1), 1, 1), "BBA");
+  assert.throws(() => rotatePlayerName("aa", 0, 1));
+  assert.throws(() => rotatePlayerName("AAA", 3, 1));
+});
+
+test("joining is atomic, rejects duplicate names and frees names on confirmed exit", () => {
+  const empty: PreparationState = { players: {}, errors: {} };
+  const joined = enterPreparationPlayer(empty, 0, "AAA");
+  const duplicate = enterPreparationPlayer(joined, 1, "AAA");
+  assert.equal(duplicate.players[1], undefined);
+  assert.match(duplicate.errors[1] ?? "", /já está em uso/);
+  assert.equal(enterPreparationPlayer(joined, 0, "BBB").players[0]?.name, "AAA");
+  const retried = enterPreparationPlayer(duplicate, 1, "AAB");
+  assert.equal(retried.errors[1], "");
+  assert.equal(retried.players[1]?.name, "AAB");
+  const changed = changePreparationAttribute(retried, 1, "wisdom", 1);
+  assert.equal(changed.players[1]?.attributes.wisdom, 2);
+  assert.equal(changed.players[0]?.attributes.wisdom, 1);
+  const invalid = changePreparationAttribute(changed, 1, "strength", -1);
+  assert.match(invalid.errors[1] ?? "", /Respeite/);
+  assert.equal(invalid.players, changed.players);
+  const left = leavePreparationPlayer(changed, 0);
+  assert.equal(enterPreparationPlayer(left, 2, "AAA").players[2]?.name, "AAA");
+  assert.match(enterPreparationPlayer(empty, 0, "AA1").errors[0] ?? "", /três letras/);
+  assert.throws(() => enterPreparationPlayer(empty, 8, "AAA"));
+  assert.deepEqual(empty, { players: {}, errors: {} });
 });
 
 test("settings enforce the agreed geometry and touch requirements", () => {
@@ -99,10 +132,11 @@ test("whole seven-cell terrains fit the usable area without overlap or clipping"
 
 test("the playable area reserves all eight player sectors at each viewport size", () => {
   const area = boardArea(1920, 1200);
-  assert.deepEqual(area, { x: 152, y: 152, width: 1616, height: 896 });
-  assert.deepEqual(boardArea(800, 600), { x: 144, y: 152, width: 512, height: 296 });
+  assert.deepEqual(area, { x: 116, y: 116, width: 1688, height: 968 });
+  assert.deepEqual(boardArea(800, 600), { x: 116, y: 116, width: 568, height: 368 });
   assert.deepEqual(boardArea(100, 100), { x: 18, y: 30, width: 64, height: 40 });
-  assert.deepEqual(boardArea(1920, 1200, 2), { x: 184, y: 184, width: 1552, height: 832 });
+  assert.deepEqual(boardArea(1920, 1200, 2), { x: 140, y: 140, width: 1640, height: 920 });
+  assert.ok(area.width * area.height > 1616 * 896);
   assert.deepEqual(boardArea(0, 0), { x: 0, y: 0, width: 0, height: 0 });
   assert.throws(() => boardArea(Infinity, 100));
 });

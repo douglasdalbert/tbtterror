@@ -1,22 +1,9 @@
-import { useId, useState } from "react";
-import { availableAttributePoints, type Attributes, type AttributeName } from "@terror/contracts";
+import { useEffect, useId, useState } from "react";
+import { availableAttributePoints, rotatePlayerName, type Attributes, type AttributeName } from "@terror/contracts";
 import { TouchButton } from "./TouchButton.js";
-
-function TabIcon({ tab }: { tab: "token" | "character" }) {
-  return (
-    <svg className="tab-icon" viewBox="0 0 24 24" aria-hidden="true">
-      {tab === "token" ? (
-        <>
-          <circle cx="12" cy="12" r="9" />
-          <circle cx="12" cy="12" r="4" />
-          <path d="M7 6l2 1m6-1l2 1m-6 11h2" />
-        </>
-      ) : (
-        <path d="M9 20v-4a7 7 0 1 1 10-6l2 4h-3v4h-4v2M8 8h5m-3-2v4" />
-      )}
-    </svg>
-  );
-}
+import { AttributeIcon, TabIcon } from "./Icons.js";
+import { LetterWheel } from "./LetterWheel.js";
+import { SectorDialog } from "./SectorDialog.js";
 
 function CalibrationToken({ scale, attributes }: {
   scale: number;
@@ -25,7 +12,7 @@ function CalibrationToken({ scale, attributes }: {
   const groups = [
     { letter: "F", value: attributes.strength, start: -145, x: 19, y: 19 },
     { letter: "D", value: attributes.dexterity, start: -25, x: 45, y: 19 },
-    { letter: "I", value: attributes.intelligence, start: 95, x: 32, y: 47 },
+    { letter: "I", value: attributes.wisdom, start: 95, x: 32, y: 47 },
   ];
   return (
     <svg
@@ -33,7 +20,7 @@ function CalibrationToken({ scale, attributes }: {
       style={{ width: `${64 * scale}px`, height: `${64 * scale}px` }}
       viewBox="0 0 64 64"
       role="img"
-      aria-label={`Token de ${Math.round(64 * scale)} pixels CSS; força ${attributes.strength}, destreza ${attributes.dexterity}, inteligência ${attributes.intelligence}`}
+      aria-label={`Token de ${Math.round(64 * scale)} pixels CSS; força ${attributes.strength}, destreza ${attributes.dexterity}, inteligência ${attributes.wisdom}`}
     >
       <circle cx="32" cy="32" r="31" fill="#192d3d" stroke="#91a9bc" strokeWidth="1.5" />
       <circle cx="32" cy="32" r="15" fill="#1678cf" />
@@ -67,21 +54,40 @@ function CalibrationToken({ scale, attributes }: {
 const attributeLabels: { attribute: AttributeName; label: string }[] = [
   { attribute: "strength", label: "Força" },
   { attribute: "dexterity", label: "Destreza" },
-  { attribute: "intelligence", label: "Inteligência" },
+  { attribute: "wisdom", label: "Inteligência" },
 ];
 
-export function PlayerSector({ slot, attributes, canEnter, scale, onEnter, onLeave, onAttribute, onScale }: {
+const tabs = [
+  { tab: "game", label: "Jogo" },
+  { tab: "token", label: "Token" },
+  { tab: "character", label: "Personagem" },
+] as const;
+type Tab = typeof tabs[number]["tab"];
+type Dialog = "join" | "leave" | AttributeName | null;
+
+export function PlayerSector({ slot, name, attributes, error, canEnter, scale, onEnter, onLeave, onClearError, onAttribute, onScale }: {
   slot: number;
+  name: string | undefined;
   attributes: Attributes | undefined;
+  error: string;
   canEnter: boolean;
   scale: number;
-  onEnter: () => void;
+  onEnter: (name: string) => void;
   onLeave: () => void;
+  onClearError: () => void;
   onAttribute: (attribute: AttributeName, delta: 1 | -1) => void;
   onScale: (delta: number) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<"token" | "character">("token");
+  const [activeTab, setActiveTab] = useState<Tab>("game");
+  const [dialog, setDialog] = useState<Dialog>(null);
+  const [draftName, setDraftName] = useState("AAA");
   const panelId = useId();
+  useEffect(() => {
+    if (attributes && dialog === "join") {
+      setDialog(null);
+      document.getElementById(`${panelId}-game`)?.focus();
+    }
+  }, [attributes, dialog, panelId]);
   const side = slot === 3 || slot === 7;
   const position = slot === 3 ? "right" : slot === 7 ? "left"
     : slot < 3 ? `top-${slot}` : `bottom-${slot - 4}`;
@@ -89,89 +95,134 @@ export function PlayerSector({ slot, attributes, canEnter, scale, onEnter, onLea
     "sector",
     `sector--${position}`,
     side ? "sector--side" : slot < 3 ? "sector--top" : "sector--bottom",
+    error ? "sector--error" : "",
   ].filter(Boolean).join(" ");
   const availablePoints = attributes ? availableAttributePoints(attributes) : 3;
+  const identity = name ?? `Setor ${slot + 1}`;
+  const rotation = slot === 3 ? 270 : slot === 7 ? 90 : slot < 3 ? 180 : 0;
+  const visibleDialog = dialog === "join" && attributes ? null : dialog;
+  const closeDialog = () => {
+    setDialog(null);
+    onClearError();
+  };
 
   return (
-    <article className={className} aria-label={`Setor ${slot + 1}`}>
+    <article className={className} aria-label={identity}>
       <div className="sector-card">
-        <div className="sector-heading">
-          <strong>Setor {slot + 1}</strong>
-          {attributes && (
+        <div className="sector-layout" inert={visibleDialog !== null}>
+          {attributes ? (
             <>
-              <div className="sector-tabs" role="tablist" aria-label={`Configuração do setor ${slot + 1}`}>
-                {(["token", "character"] as const).map((tab) => (
+              <nav className="sector-identity" aria-label={`Jogador ${identity}`}>
+                <strong className="player-name">{name}</strong>
+                <TouchButton className="leave-button" aria-label={`Sair ${identity}`}
+                  onPress={() => setDialog("leave")}><TabIcon tab="leave" /></TouchButton>
+              </nav>
+              <div id={`${panelId}-content`} className="player-setup" role="tabpanel"
+                aria-labelledby={`${panelId}-${activeTab}`}>
+                {activeTab === "token" && (
+                  <div className="calibration-controls">
+                    <TouchButton aria-label={`Diminuir escala compartilhada de ${identity}`}
+                      disabled={scale <= 0.5} onPress={() => onScale(-0.05)}>−</TouchButton>
+                    <CalibrationToken scale={scale} attributes={attributes} />
+                    <TouchButton aria-label={`Aumentar escala compartilhada de ${identity}`}
+                      disabled={scale >= 2} onPress={() => onScale(0.05)}>+</TouchButton>
+                  </div>
+                )}
+                {activeTab === "character" && (
+                  <div className="attribute-columns">
+                    <output className="available-points" aria-live="polite"
+                      aria-label={`Pontos disponíveis de ${identity}`}>+{availablePoints}</output>
+                    {attributeLabels.map(({ attribute, label }) => (
+                      <div key={attribute} className="attribute-control">
+                        <TouchButton className="attribute-info" aria-label={`Sobre ${label}`}
+                          onPress={() => setDialog(attribute)}><AttributeIcon attribute={attribute} /></TouchButton>
+                        <output className={attributes[attribute] > 1 ? "attribute-value--allocated" : ""}
+                          aria-label={`${label} de ${identity}`}>{attributes[attribute]}</output>
+                        <div className="attribute-adjustments">
+                          <TouchButton aria-label={`Diminuir ${label} de ${identity}`}
+                            disabled={attributes[attribute] <= 1} onPress={() => onAttribute(attribute, -1)}>−</TouchButton>
+                          <TouchButton aria-label={`Aumentar ${label} de ${identity}`}
+                            disabled={attributes[attribute] >= 3 || availablePoints === 0}
+                            onPress={() => onAttribute(attribute, 1)}>+</TouchButton>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="sector-tabs" role="tablist" aria-orientation="vertical"
+                aria-label={`Configuração de ${identity}`}>
+                {tabs.map(({ tab, label }) => (
                   <TouchButton key={tab} id={`${panelId}-${tab}`} role="tab"
-                    aria-label={tab === "token" ? "Token" : "Personagem"}
+                    aria-label={label === "Personagem" && availablePoints > 0
+                      ? `Personagem, ${availablePoints} pontos disponíveis` : label}
+                    alert={tab === "character" && availablePoints > 0}
                     aria-selected={activeTab === tab} aria-controls={`${panelId}-content`}
                     tabIndex={activeTab === tab ? 0 : -1}
                     onKeyDown={(event) => {
-                      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                      if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
                       event.preventDefault();
-                      const nextTab = event.key === "Home" ? "token" : event.key === "End" ? "character"
-                        : activeTab === "token" ? "character" : "token";
+                      const index = tabs.findIndex((item) => item.tab === tab);
+                      const nextTab = event.key === "Home" ? "game" : event.key === "End" ? "character"
+                        : tabs[(index + (event.key === "ArrowDown" ? 1 : 2)) % tabs.length]?.tab;
+                      if (!nextTab) return;
                       setActiveTab(nextTab);
-                      const target = event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(
+                      event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(
                         `button[id="${panelId}-${nextTab}"]`,
-                      );
-                      target?.focus();
+                      )?.focus();
                     }}
-                    onPress={() => setActiveTab(tab)}>
-                    <TabIcon tab={tab} />
-                  </TouchButton>
+                    onPress={() => setActiveTab(tab)}><TabIcon tab={tab} /></TouchButton>
                 ))}
               </div>
-              <TouchButton className="leave-button" onPress={() => {
-                setActiveTab("token");
-                onLeave();
-              }}>Sair</TouchButton>
             </>
+          ) : (
+            <div className="join-area">
+              <TouchButton className="join-button" disabled={!canEnter} onPress={() => {
+                setDraftName("AAA");
+                setActiveTab("game");
+                onClearError();
+                setDialog("join");
+              }}>{canEnter ? "Entrar" : "Carregando…"}</TouchButton>
+            </div>
           )}
         </div>
-        {attributes ? (
-          <div id={`${panelId}-content`} className="player-setup" role="tabpanel"
-            aria-labelledby={`${panelId}-${activeTab}`}>
-            {activeTab === "token" ? (
-              <div className="calibration-controls">
-                <TouchButton aria-label={`Diminuir escala compartilhada no setor ${slot + 1}`}
-                  disabled={scale <= 0.5} onPress={() => onScale(-0.05)}>−</TouchButton>
-                <CalibrationToken scale={scale} attributes={attributes} />
-                <TouchButton aria-label={`Aumentar escala compartilhada no setor ${slot + 1}`}
-                  disabled={scale >= 2} onPress={() => onScale(0.05)}>+</TouchButton>
-                <span className="scale-label">{scale.toFixed(2)}×</span>
+        {visibleDialog === "join" && (
+          <SectorDialog title="Nome do jogador" onClose={closeDialog}>
+            <div className="name-selection">
+              <div className="name-wheels">
+                {Array.from(draftName, (letter, index) => (
+                  <LetterWheel key={index} value={letter} label={`Letra ${index + 1}`}
+                    rotation={rotation} onRotate={(delta) => {
+                      setDraftName((current) => rotatePlayerName(current, index, delta));
+                      onClearError();
+                    }} />
+                ))}
               </div>
-            ) : (
-              <div className="character-definition">
-                <p className="available-points" aria-live="polite">Pontos disponíveis: {availablePoints}</p>
-                <div className="attribute-columns">
-                  {attributeLabels.map(({ attribute, label }) => (
-                    <div key={attribute} className="attribute-control">
-                      <span>{label}</span>
-                      <div>
-                        <TouchButton aria-label={`Diminuir ${label} no setor ${slot + 1}`}
-                          disabled={attributes[attribute] <= 1} onPress={() => onAttribute(attribute, -1)}>
-                          −
-                        </TouchButton>
-                        <output aria-label={`${label} no setor ${slot + 1}`}>{attributes[attribute]}</output>
-                        <TouchButton aria-label={`Aumentar ${label} no setor ${slot + 1}`}
-                          disabled={attributes[attribute] >= 3 || availablePoints === 0}
-                          onPress={() => onAttribute(attribute, 1)}>
-                          +
-                        </TouchButton>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="join-area">
-            <TouchButton className="join-button" disabled={!canEnter} onPress={onEnter}>
-              {canEnter ? "Entrar" : "Carregando…"}
-            </TouchButton>
-          </div>
+              <TouchButton className="confirm-join" disabled={!canEnter} onPress={() => onEnter(draftName)}>
+                Entrar
+              </TouchButton>
+            </div>
+          </SectorDialog>
         )}
+        {visibleDialog === "leave" && (
+          <SectorDialog title="Quer sair?" onClose={closeDialog}>
+            <div className="exit-confirmation">
+              <TouchButton onPress={closeDialog}>Cancelar</TouchButton>
+              <TouchButton onPress={() => {
+                setDialog(null);
+                setActiveTab("game");
+                onLeave();
+              }}>Sair</TouchButton>
+            </div>
+          </SectorDialog>
+        )}
+        {visibleDialog && visibleDialog !== "join" && visibleDialog !== "leave" && (
+          <SectorDialog title={attributeLabels.find(({ attribute }) => attribute === visibleDialog)?.label ?? ""}
+            onClose={closeDialog}>
+            <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+          </SectorDialog>
+        )}
+        {error && <p className="sector-error" role="alert">{error}</p>}
       </div>
     </article>
   );

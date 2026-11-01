@@ -7,9 +7,9 @@ import { Match } from "../match.js";
 const catalog: Catalog = {
   revision: 1,
   settings: { maxPlayers: 8, minimumTouchPoints: 10, countdownSeconds: 10, moduleCells: 7, rotationStepDegrees: 60 },
-  characters: [{ id: "test", name: "Test", attributes: { strength: 2, dexterity: 2, intelligence: 2 }, health: 3 }],
+  characters: [{ id: "test", name: "Test", attributes: { strength: 2, dexterity: 2, wisdom: 2 }, health: 3 }],
   monsters: [{
-    id: "test", name: "Test", attributes: { strength: 2, dexterity: 2, intelligence: 2 },
+    id: "test", name: "Test", attributes: { strength: 2, dexterity: 2, wisdom: 2 },
     movementMultiplier: 1.2, capabilities: ["sleep"], trapLimit: 3, sleepingVisionMultiplier: 0.1,
   }],
 };

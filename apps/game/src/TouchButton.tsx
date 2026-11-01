@@ -2,19 +2,21 @@ import { useRef, type ButtonHTMLAttributes } from "react";
 
 type TouchButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onClick"> & {
   onPress: () => void;
+  alert?: boolean;
 };
 
-export function TouchButton({ onPress, disabled, children, ...props }: TouchButtonProps) {
+export function TouchButton({ onPress, disabled, children, alert = false, className, ...props }: TouchButtonProps) {
   const activePointer = useRef<number | null>(null);
-  const suppressClick = useRef(false);
+  const mousePressed = useRef(false);
 
   return (
     <button
       {...props}
+      className={["touch-button", className].filter(Boolean).join(" ")}
       type="button"
       disabled={disabled}
       onPointerDown={(event) => {
-        suppressClick.current = event.pointerType !== "mouse";
+        mousePressed.current = event.pointerType === "mouse" && event.button === 0;
         if (disabled || event.button !== 0 || event.pointerType === "mouse"
           || activePointer.current !== null) return;
         activePointer.current = event.pointerId;
@@ -31,16 +33,23 @@ export function TouchButton({ onPress, disabled, children, ...props }: TouchButt
       }}
       onPointerCancel={(event) => {
         if (activePointer.current === event.pointerId) activePointer.current = null;
+        mousePressed.current = false;
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse") mousePressed.current = false;
       }}
       onLostPointerCapture={(event) => {
         if (activePointer.current === event.pointerId) activePointer.current = null;
       }}
       onClick={(event) => {
-        // Touch is handled per pointer; retain keyboard and mouse activation without doubling taps.
-        if (event.detail === 0 || !suppressClick.current) onPress();
+        // Ignore touch clicks retargeted from a gesture that started on another control.
+        const activate = event.detail === 0 || mousePressed.current;
+        mousePressed.current = false;
+        if (activate) onPress();
       }}
     >
       {children}
+      {alert && <span className="button-alert" aria-hidden="true" />}
     </button>
   );
 }

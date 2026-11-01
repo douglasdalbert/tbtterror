@@ -32,11 +32,13 @@ test("API, migrations, frozen configuration, login-free admin and socket reconne
   });
   await migrate(pool);
   await migrate(pool);
-  assert.equal((await pool.query("SELECT * FROM schema_migrations")).rowCount, 2);
+  assert.equal((await pool.query("SELECT * FROM schema_migrations")).rowCount, 3);
   const catalog = await loadCatalog(pool);
   for (const definition of [...catalog.characters, ...catalog.monsters]) {
     assert.equal(definition.attributes.dexterity, 2);
     assert.equal("speed" in definition.attributes, false);
+    assert.equal(definition.attributes.wisdom, 2);
+    assert.equal("intelligence" in definition.attributes, false);
   }
   const match = new Match(catalog);
   application = createApplication(pool, match);

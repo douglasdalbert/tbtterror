@@ -2,13 +2,14 @@ import { z } from "zod";
 
 export { parseApiResponse } from "./http.js";
 export { boardArea, cellDimensions, hexCorners, playerSectorDepth, terrainLayout } from "./layout.js";
+export { enterPreparationPlayer, leavePreparationPlayer, changePreparationAttribute, rotatePlayerName, playerNameSchema, type PreparationState } from "./preparation.js";
 
 const attributeSchema = z.number().int().min(1).max(3);
 
 export const attributesSchema = z.strictObject({
   strength: attributeSchema,
   dexterity: attributeSchema,
-  intelligence: attributeSchema,
+  wisdom: attributeSchema,
 });
 
 export type Attributes = z.infer<typeof attributesSchema>;
@@ -16,17 +17,17 @@ export type AttributeName = keyof Attributes;
 export const ATTRIBUTE_POINTS = 3;
 
 export const playerAttributesSchema = attributesSchema.refine(
-  (attributes) => attributes.strength + attributes.dexterity + attributes.intelligence <= 3 + ATTRIBUTE_POINTS,
+  (attributes) => attributes.strength + attributes.dexterity + attributes.wisdom <= 3 + ATTRIBUTE_POINTS,
   "A distribuição excede os três pontos disponíveis.",
 );
 
 export function initialPlayerAttributes(): Attributes {
-  return { strength: 1, dexterity: 1, intelligence: 1 };
+  return { strength: 1, dexterity: 1, wisdom: 1 };
 }
 
 export function availableAttributePoints(attributes: Attributes): number {
   const validated = playerAttributesSchema.parse(attributes);
-  return 3 + ATTRIBUTE_POINTS - validated.strength - validated.dexterity - validated.intelligence;
+  return 3 + ATTRIBUTE_POINTS - validated.strength - validated.dexterity - validated.wisdom;
 }
 
 export function allocateAttributePoint(attributes: Attributes, attribute: AttributeName, delta: 1 | -1): Attributes {
