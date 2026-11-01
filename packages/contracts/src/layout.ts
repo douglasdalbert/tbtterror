@@ -32,18 +32,24 @@ export function hexCorners(center: Point, radius: number): Point[] {
   });
 }
 
+export function boardArea(width: number, height: number) {
+  z.number().nonnegative().finite().parse(width);
+  z.number().nonnegative().finite().parse(height);
+  const horizontalInset = Math.min(230, width * 0.16);
+  const verticalInset = Math.min(230, height * 0.22);
+  return {
+    x: horizontalInset,
+    y: verticalInset,
+    width: Math.max(0, width - horizontalInset * 2),
+    height: Math.max(0, height - verticalInset * 2),
+  };
+}
+
 export function terrainLayout(width: number, height: number, scale: number) {
   z.number().nonnegative().finite().parse(width);
   z.number().nonnegative().finite().parse(height);
   const dimensions = cellDimensions(scale);
-  // Provisional perimeter for player sectors; replaced by actual sector bounds in stage 2.
-  const inset = dimensions.tokenDiameter * 2;
-  const area = {
-    x: Math.min(inset, width / 2),
-    y: Math.min(inset, height / 2),
-    width: Math.max(0, width - inset * 2),
-    height: Math.max(0, height - inset * 2),
-  };
+  const area = boardArea(width, height);
   const origin = { x: width / 2, y: height / 2 };
   const toPixel = ({ q, r }: Axial): Point => ({
     x: origin.x + dimensions.width * (q + r / 2),

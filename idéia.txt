@@ -42,3 +42,4 @@ O jogo funciona da seguinte forma:
 * Levar os ossos (item do mapa) do FK para uma igreja e queimá-los (então precisaria achar isqueiro)
 - Na tela inicial, enquanto o jogador está preenchendo, para as 4 direções iremos mostrar textos de ajuda que vão rolando; Exemplo:
 * Todos vocês possuem walktalkie e podem conversar entre si (começando com uma imagem de walktalkie)
+* Caso você esteja no estado "dormindo", poderá ser acordado por um outro jogador.

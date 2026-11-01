@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export { parseApiResponse } from "./http.js";
-export { cellDimensions, hexCorners, terrainLayout } from "./layout.js";
+export { boardArea, cellDimensions, hexCorners, terrainLayout } from "./layout.js";
 
 const attributeSchema = z.number().int().min(1).max(3);
 

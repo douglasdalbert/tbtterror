@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { attributesSchema, matchSnapshotSchema, parseApiResponse, settingsSchema } from "./index.js";
-import { cellDimensions, hexCorners, terrainLayout } from "./layout.js";
+import { boardArea, cellDimensions, hexCorners, terrainLayout } from "./layout.js";
 
 test("attributes reject out-of-range values and unknown properties", () => {
   assert.equal(attributesSchema.safeParse({ strength: 0, speed: 2, intelligence: 2 }).success, false);
@@ -73,6 +73,15 @@ test("whole seven-cell terrains fit the usable area without overlap or clipping"
       }
     }
   }
+});
+
+test("the playable area reserves all eight player sectors at each viewport size", () => {
+  const area = boardArea(1920, 1200);
+  assert.deepEqual(area, { x: 230, y: 230, width: 1460, height: 740 });
+  assert.deepEqual(boardArea(800, 600), { x: 128, y: 132, width: 544, height: 336 });
+  assert.deepEqual(boardArea(100, 100), { x: 16, y: 22, width: 68, height: 56 });
+  assert.deepEqual(boardArea(0, 0), { x: 0, y: 0, width: 0, height: 0 });
+  assert.throws(() => boardArea(Infinity, 100));
 });
 
 test("larger tokens reduce capacity and undersized screens fit no complete terrain", () => {

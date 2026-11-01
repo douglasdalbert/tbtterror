@@ -16,18 +16,21 @@ aqui prevalecem sobre alternativas antigas dessa proposta.
 - [x] Escolher arquitetura, infraestrutura e geometria do mapa.
 - [x] Registrar requisitos, etapas e instruções para continuidade.
 - [x] Implementar a base técnica (aceite no tablet real ainda pendente).
-- [ ] Validar multitoque, escala e movimento no tablet real.
+- [x] Implementar o fluxo local de seleção, calibração e tokens da etapa 2.
+- [ ] Validar acesso LAN e pelo menos dez toques no tablet real.
 
-**Estado:** base técnica implementada e validada no notebook e no navegador:
-jogo React/Phaser, API/Socket.IO, PostgreSQL persistente e scaffold do admin
-separado, agora sem login. A prévia calcula vários terrenos a partir do token
-e permite ajustar a escala localmente. Ainda não há jogadores,
-movimento, partida ativa, pausa ou CRUDs de edição.
+**Estado:** etapa 2 implementada no cliente: oito setores, seleção local de
+personagem, calibração compartilhada, prévia do token e arrasto por ponteiros
+independentes.
+Fullscreen e áudio são autorizados por interação; dicas acompanham a orientação
+de cada setor. As seleções e posições ainda são locais ao navegador; o servidor
+continua mantendo apenas o lobby, sem prontidão, partida ativa ou pausa. Acesso
+LAN e aceite multitoque no tablet físico ainda não foram validados.
 
-**Próxima etapa:** etapa 2, mesa multitoque e calibração. Primeiro abrir o jogo
-no tablet pela LAN; implementar os oito setores, seleção básica, atribuição
-de ponteiros e escala compartilhada. Validar dez contatos simultâneos no
-hardware real antes de avançar para IA e puzzles.
+**Próxima etapa:** concluir o aceite da etapa 2 no tablet pela LAN: confirmar
+dez contatos simultâneos entre tokens e controles, ajuste compartilhado sem
+scroll/zoom involuntário, fullscreen, áudio e cancelamento de ponteiros. Só
+depois avançar para início da partida e pausa.
 
 **Primeiro marco jogável:** entrada dos jogadores, calibração compartilhada,
 tokens com movimento simultâneo e obstáculos simples no tablet real.
@@ -124,8 +127,15 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
   entrada multitoque e a atribuição de cada ponteiro ao token correto.
 - A interface durante o jogo prioriza ícones, não leitura de menus.
 - Durante a preparação, prever dicas rolantes legíveis nas quatro orientações,
-  incluindo um ícone próprio/licenciado de walkie-talkie e a orientação de que
-  jogadores podem conversar entre si. Isso não exige chat de voz nesta etapa.
+  enquanto os jogadores escolhem/configuram seus personagens. Orientar cada
+  apresentação para quem está naquele lado da mesa, sem exigir ler de cabeça
+  para baixo; os textos de ajuda são uma exceção à interface de jogo por ícones.
+- Dicas iniciais:
+  - “Todos vocês possuem walkie-talkie e podem conversar entre si.” Começar a
+    dica com um ícone próprio/licenciado de walkie-talkie.
+  - “Caso você esteja no estado ‘dormindo’, poderá ser acordado por outro jogador.”
+- A dica do walkie-talkie comunica uma regra temática de comunicação entre
+  amigos; não exige implementar chat de voz.
 
 ## Executar a base técnica
 
@@ -364,6 +374,16 @@ docker compose stop
   a calibração compartilhada do token circular.
 - Indicadores na borda interna do token mostram níveis exigidos e utilizados,
   sempre dentro do diâmetro máximo calibrado.
+- Referência visual fornecida pelo usuário: disco central azul e faixas em arco
+  na periferia para força, velocidade, inteligência e demais status. As áreas
+  vermelha, verde e roxa do exemplo representam regiões de indicadores; a
+  associação definitiva entre cores e atributos ainda não foi escolhida.
+- O diâmetro externo de toda a composição (centro mais faixas) é `64s` pixels
+  CSS. As faixas ocupam parte do disco, não um anel extra fora do token. Centro,
+  espessura das faixas e ícones escalam proporcionalmente.
+- Mostrar os níveis em uso com preenchimento/segmentos e ícones identificáveis,
+  sem depender exclusivamente de cor. O desenho de referência define o formato,
+  não implementa nem altera fórmulas de atributos.
 - O arrasto mede a velocidade solicitada pelo dedo. Ao exceder a permitida,
   o token fica para trás/parado enquanto a solicitação permanecer acima do
   limite; não simplesmente acelerar o token para alcançar o dedo.
@@ -412,6 +432,18 @@ docker compose stop
 - Monstro possui mapa/campo de visão e névoa diferentes dos jogadores.
 - Filtrar estado no servidor por papel; o futuro celular não deve receber
   posições ocultas apenas para escondê-las visualmente.
+- Jogadores não veem os status do monstro, incluindo seus atributos e níveis
+  em uso. Não desenhar esses indicadores no tablet nem transmiti-los na visão
+  da partida destinada aos jogadores.
+- No app do monstro, o controlador pode ver os status em uso dos jogadores,
+  como níveis de força, velocidade e inteligência utilizados naquele momento.
+  Essa informação pertence à visão do monstro, não a um painel compartilhado.
+- Indicadores de um jogador acompanham sua visibilidade/revelação para o monstro:
+  não revelar posição ou status atuais de um jogador oculto pela névoa por meio
+  dessa interface. Sono e revelações temporárias seguem suas regras específicas.
+- A projeção futura para jogadores deve separar conteúdo interno do monstro
+  do conteúdo público. O `/api/catalog` atual é um scaffold que inclui definições
+  de monstros; ainda precisa ser filtrado para cumprir essa regra na partida.
 - Monstros recebem eventos detectáveis, como som e exposição de luz, conforme
   seus próprios critérios e alcance.
 - A IA patrulha aleatoriamente e investiga pontos detectados usando rotas
@@ -483,18 +515,22 @@ porque o código compila: verificar a experiência ou regra correspondente.
 verificada; dado de teste persiste após recriar o container; admin pode ser
 desligado sem interromper jogo/servidor.
 
-### 2. Mesa multitoque e calibração — próxima
+### 2. Mesa multitoque e calibração — implementada no cliente; aceite físico pendente
 
-- [ ] Oito setores, entrada, seleção básica e círculo com borda de indicadores.
-- [ ] Fullscreen, áudio autorizado e tratamento de cancelamento de ponteiros.
-- [ ] Escala compartilhada e cálculo da área útil, inclusive em resize.
-- [ ] Arrasto simultâneo com identificação independente de ponteiros.
-- [ ] Dicas de preparação nas quatro orientações, incluindo walkie-talkie.
+- [x] Oito setores, entrada, seleção básica e círculo com borda de indicadores.
+- [x] Fullscreen e áudio autorizados por gesto; liberar arrasto ao cancelar
+  ponteiros ou perder foco.
+- [x] Escala compartilhada e cálculo da área útil, inclusive em resize.
+- [x] Arrasto com identificação independente de ponteiros.
+- [x] Dicas de preparação nas quatro orientações, incluindo walkie-talkie.
+- [x] Token com disco central e faixas internas de status conforme referência,
+  sem ultrapassar o diâmetro calibrado.
 
 **Aceite:** pelo menos dez contatos simultâneos no dispositivo real, incluindo
 tokens e controles, sem roubar gestos; ajustar um círculo escala todos; não há
-scroll/zoom involuntário nem sobreposição que impeça jogar. Registrar se o
-navegador/hardware não atingir o requisito.
+scroll/zoom involuntário nem sobreposição que impeça jogar. Ainda pendente:
+verificar todos esses comportamentos no tablet real e registrar eventuais
+limitações do navegador/hardware.
 
 ### 3. Início, capítulo e pausa
 
@@ -522,6 +558,9 @@ inválidos; comunicar claramente quando a tela/escala não comportar a partida.
 - [ ] Velocidade solicitada pelo dedo, limites e indicadores.
 - [ ] Colisões e travessias por requisitos.
 - [ ] Névoa compartilhada, visão própria do monstro e modificadores de raio.
+- [ ] Filtrar status do monstro da visão dos jogadores, inclusive no catálogo
+  público; projetar status em uso dos jogadores somente na visão autorizada
+  do monstro.
 
 **Aceite:** testar excesso de velocidade, barreiras e atributos insuficientes;
 o cliente do monstro não recebe posições ocultas; validar fluidez no tablet.
@@ -569,6 +608,7 @@ O scaffold do admin pertence à etapa 1; os CRUDs completos pertencem a esta.
 
 - [ ] QR code e associação ao papel/controlador.
 - [ ] Mapa filtrado, joystick e ações.
+- [ ] Exibir status em uso dos jogadores visíveis/revelados ao monstro.
 - [ ] Transferência IA/humano e reconexão.
 - [ ] Posteriormente: múltiplos monstros e jogadores transformados.
 
@@ -593,6 +633,8 @@ sem duplicar controladores ou expor informações ocultas.
 | 2026-10-31 | Arquitetura, requisitos e etapas consolidados; instruções para agentes criadas. | Revisão documental frente à proposta e às decisões da conversa; sem código executável nesta entrega. |
 | 2026-10-31 | Base técnica: quatro workspaces, Compose, migração/conteúdo mínimo, API/Socket.IO e admin opcional. | Build/typecheck, sete testes unitários, uma integração PostgreSQL, verificação HTTP/WebSocket, ciclo de vida do volume/admin/servidor e canvas no navegador. Tablet físico ainda pendente. |
 | 2026-10-31 | Token máximo 64 px, folga 8 px por lado, indicadores internos, prévia de vários terrenos proporcional e admin sem login. | Build/typecheck e dez testes unitários, incluindo encaixe sem sobreposição, contenção de células e redução de capacidade ao aumentar a escala. Calibração compartilhada e setores reais ainda pendentes. |
+| 2026-11-01 | Regras de visibilidade de status, duas dicas nas quatro orientações e referência do token com faixas internas registradas. | Atualização documental; indicadores, dicas e filtragem do catálogo ainda não implementados. |
+| 2026-11-01 | Etapa 2 no cliente: oito setores, seleção básica, escala compartilhada, área útil responsiva, tokens arrastáveis, dicas orientadas, fullscreen e autorização de áudio. | `npm run typecheck`, `npm test` (8 contratos e 3 testes do servidor), `npm run build`; navegador com mock efêmero confirmou seleção, escala comum, arrasto e ativação de fullscreen/áudio. Acesso LAN e dez toques simultâneos no tablet real continuam pendentes. |
 
 Adicionar novas linhas com entregas reais e evidências de validação. Não listar
 como concluídos comportamentos ainda apenas planejados.
