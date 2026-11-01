@@ -155,7 +155,7 @@ class TerrainPreviewScene extends Phaser.Scene {
       tokenGraphics.lineStyle(Math.max(1, diameter * 0.025), 0x84a8c1, 0.9);
       tokenGraphics.strokeCircle(center.x, center.y, diameter * 0.49);
       const groupStarts = [-2.57, -0.48, 1.62];
-      const values = [attributes.strength, attributes.speed, attributes.intelligence];
+      const values = [attributes.strength, attributes.dexterity, attributes.intelligence];
       for (let group = 0; group < values.length; group++) {
         const groupStart = groupStarts[group];
         const value = values[group];
@@ -206,9 +206,9 @@ class TerrainPreviewScene extends Phaser.Scene {
       { x: area.x + area.width * 0.5, y: area.y + diameter / 2 },
       { x: area.x + area.width * 0.8, y: area.y + diameter / 2 },
       { x: area.x + area.width - diameter / 2, y: area.y + area.height * 0.5 },
-      { x: area.x + area.width * 0.8, y: area.y + area.height - diameter / 2 },
-      { x: area.x + area.width * 0.5, y: area.y + area.height - diameter / 2 },
       { x: area.x + area.width * 0.2, y: area.y + area.height - diameter / 2 },
+      { x: area.x + area.width * 0.5, y: area.y + area.height - diameter / 2 },
+      { x: area.x + area.width * 0.8, y: area.y + area.height - diameter / 2 },
       { x: area.x + diameter / 2, y: area.y + area.height * 0.5 },
     ];
     return this.constrainPosition(positions[slot] ?? positions[0]!, area, diameter);
@@ -228,7 +228,7 @@ class TerrainPreviewScene extends Phaser.Scene {
   private updateLabels(slot: number, center: Position, diameter: number) {
     let labels = this.#labels.get(slot);
     if (!labels) {
-      labels = ["F", "V", "I"].map((letter) =>
+      labels = ["F", "D", "I"].map((letter) =>
         this.add.text(0, 0, letter, {
           fontFamily: "system-ui, sans-serif",
           fontSize: "8px",

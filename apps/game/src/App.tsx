@@ -1,9 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { io, type Socket } from "socket.io-client";
 import {
   catalogSchema,
   matchSnapshotSchema,
   parseApiResponse,
+  allocateAttributePoint,
+  initialPlayerAttributes,
+  playerAttributesSchema,
+  playerSectorDepth,
+  type Attributes,
+  type AttributeName,
   type Catalog,
   type MatchSnapshot,
   type ClientToServerEvents,
@@ -11,8 +17,8 @@ import {
 } from "@terror/contracts";
 import { Board, type LayoutSummary } from "./Board.js";
 import { PlayerSector } from "./PlayerSector.js";
-
-const noCharacters: Catalog["characters"] = [];
+import { TouchButton } from "./TouchButton.js";
+import { PreparationTips } from "./PreparationTips.js";
 
 export function App() {
   const [catalog, setCatalog] = useState<Catalog>();
@@ -24,7 +30,10 @@ export function App() {
   const [audioReady, setAudioReady] = useState(false);
   const [scale, setScale] = useState(1);
   const [layout, setLayout] = useState<LayoutSummary>();
-  const [selections, setSelections] = useState<Record<number, string>>({});
+  const [selectionState, setSelectionState] = useState<{ players: Record<number, Attributes>; error: string }>({
+    players: {}, error: "",
+  });
+  const selections = selectionState.players;
   const [hintIndex, setHintIndex] = useState(0);
   const audioContext = useRef<AudioContext | null>(null);
 
@@ -115,59 +124,74 @@ export function App() {
     setScale((current) => Math.min(2, Math.max(0.5, Math.round((current + delta) * 20) / 20)));
   }
 
-  const characters = catalog?.characters ?? noCharacters;
-  const previewPlayers = useMemo(() => Object.entries(selections).flatMap(([slot, characterId]) => {
-    const character = characters.find(({ id }) => id === characterId);
-    return character ? [{ slot: Number(slot), name: character.name, attributes: character.attributes }] : [];
-  }), [characters, selections]);
+  function changeAttribute(slot: number, attribute: AttributeName, delta: 1 | -1) {
+    setSelectionState((current) => {
+      const attributes = current.players[slot];
+      if (!attributes) return { ...current, error: "Não é possível editar um setor vazio." };
+      const proposed = playerAttributesSchema.safeParse({
+        ...attributes, [attribute]: attributes[attribute] + delta,
+      });
+      if (!proposed.success) {
+        return { ...current, error: `Setor ${slot + 1}: respeite os níveis de 1 a 3 e os três pontos disponíveis.` };
+      }
+      return {
+        players: { ...current.players, [slot]: allocateAttributePoint(attributes, attribute, delta) }, error: "",
+      };
+    });
+  }
+
+  const previewPlayers = useMemo(() => Object.entries(selections).map(([slot, attributes]) => ({
+    slot: Number(slot), name: `Jogador ${Number(slot) + 1}`, attributes,
+  })), [selections]);
 
   return (
-    <main className="game">
+    <main className="game" style={{ "--sector-depth": `${playerSectorDepth(scale)}px` } as CSSProperties}>
       <Board scale={scale} players={previewPlayers} onLayout={setLayout} />
       <section className="player-sectors" aria-label="Seleção dos jogadores">
-        {Array.from({ length: 8 }, (_, slot) => {
-          const character = characters.find(({ id }) => id === selections[slot]);
-          return (
-            <PlayerSector
-              key={slot}
-              slot={slot}
-              character={character}
-              characters={characters}
-              scale={scale}
-              hintIndex={hintIndex}
-              onEnter={() => {
-                const firstCharacter = characters[0];
-                if (firstCharacter) setSelections((current) => ({ ...current, [slot]: firstCharacter.id }));
-              }}
-              onLeave={() => setSelections((current) => {
-                const updated = { ...current };
-                delete updated[slot];
-                return updated;
-              })}
-              onSelect={(id) => setSelections((current) => ({ ...current, [slot]: id }))}
-              onScale={changeScale}
-            />
-          );
-        })}
+        {Array.from({ length: 8 }, (_, slot) => (
+          <PlayerSector
+            key={slot}
+            slot={slot}
+            attributes={selections[slot]}
+            canEnter={catalog !== undefined}
+            scale={scale}
+            onEnter={() => setSelectionState((current) => ({
+              players: { ...current.players, [slot]: initialPlayerAttributes() }, error: "",
+            }))}
+            onLeave={() => setSelectionState((current) => {
+              const updated = { ...current.players };
+              delete updated[slot];
+              return { players: updated, error: "" };
+            })}
+            onAttribute={(attribute, delta) => changeAttribute(slot, attribute, delta)}
+            onScale={changeScale}
+          />
+        ))}
       </section>
-      <section className="status" aria-live="polite">
-        <h1>Terror</h1>
-        <p>{connection}</p>
-        {error && <p role="alert" className="error">{error}</p>}
-        {snapshot && catalog && (
-          <p>Preparação · conteúdo v{snapshot.catalogRevision} · {Object.keys(selections).length}/8 jogadores</p>
-        )}
-        <p className="note">Arraste seu token. A calibração de qualquer setor ajusta todos.</p>
-        {layout && <p className="note">Prévia · {layout.terrains} terrenos · token {Math.round(layout.tokenDiameter)} px</p>}
-        {layout?.terrains === 0 && <p role="alert" className="error">Não cabe um terreno completo nesta escala.</p>}
-        {activationError && <p role="alert" className="error">{activationError}</p>}
-        <button type="button" className="immersive-button" onClick={() => void activateImmersiveMode()}>
-          {fullscreen && audioReady ? "Áudio e tela cheia ativados"
-            : fullscreen ? "Tela cheia ativada · áudio pendente"
-              : audioReady ? "Áudio ativado · tela cheia pendente"
-                : "Ativar tela cheia e áudio"}
-        </button>
-      </section>
+      <div className="preparation-center">
+        <PreparationTips hintIndex={hintIndex} />
+        <section className="status" aria-live="polite">
+          <div className="status-heading">
+            <h1>Terror</h1>
+            <p>{connection}</p>
+          </div>
+          {error && <p role="alert" className="error">{error}</p>}
+          {snapshot && catalog && (
+            <p>Preparação · conteúdo v{snapshot.catalogRevision} · {Object.keys(selections).length}/8 jogadores</p>
+          )}
+          <p className="note">Arraste seu token. A calibração de qualquer setor ajusta todos.</p>
+          {layout && <p className="note">Prévia · {layout.terrains} terrenos · token {Math.round(layout.tokenDiameter)} px</p>}
+          {layout?.terrains === 0 && <p role="alert" className="error">Não cabe um terreno completo nesta escala.</p>}
+          {activationError && <p role="alert" className="error">{activationError}</p>}
+          {selectionState.error && <p role="alert" className="error">{selectionState.error}</p>}
+          <TouchButton className="immersive-button" onPress={() => void activateImmersiveMode()}>
+            {fullscreen && audioReady ? "Áudio e tela cheia ativados"
+              : fullscreen ? "Tela cheia ativada · áudio pendente"
+                : audioReady ? "Áudio ativado · tela cheia pendente"
+                  : "Ativar tela cheia e áudio"}
+          </TouchButton>
+        </section>
+      </div>
     </main>
   );
 }

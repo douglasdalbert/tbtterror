@@ -17,20 +17,29 @@ aqui prevalecem sobre alternativas antigas dessa proposta.
 - [x] Registrar requisitos, etapas e instruções para continuidade.
 - [x] Implementar a base técnica (aceite no tablet real ainda pendente).
 - [x] Implementar o fluxo local de seleção, calibração e tokens da etapa 2.
-- [ ] Validar acesso LAN e pelo menos dez toques no tablet real.
+- [x] Validar acesso LAN no tablet real.
+- [ ] Completar o aceite de dez contatos entre tokens e controles no tablet.
 
 **Estado:** etapa 2 implementada no cliente: oito setores, seleção local de
 personagem, calibração compartilhada, prévia do token e arrasto por ponteiros
 independentes.
-Fullscreen e áudio são autorizados por interação; dicas acompanham a orientação
-de cada setor. As seleções e posições ainda são locais ao navegador; o servidor
-continua mantendo apenas o lobby, sem prontidão, partida ativa ou pausa. Acesso
-LAN e aceite multitoque no tablet físico ainda não foram validados.
+Fullscreen e áudio são autorizados por interação; quatro dicas orientadas ficam
+fora da caixa central, uma em cada lado, sem ocupar os setores. Cada setor
+ocupado tem abas com ícones de token (calibração) e
+cabeça (definição de personagem), à esquerda de Sair; o label Setor X permanece
+no cabeçalho. Não há seletor nativo: o jogador distribui três pontos entre força,
+destreza e inteligência, partindo de 1 em cada atributo. As definições e posições ainda são locais ao
+navegador; o servidor continua mantendo apenas o lobby, sem prontidão, partida
+ativa ou pausa. O usuário confirmou acesso LAN, calibração comum e arrasto de
+todos os tokens no tablet. O bloqueio dos controles durante o arrasto foi
+corrigido no cliente e aguarda novo teste físico.
+Os tokens dos setores 5 e 7 começam diante de seus próprios setores; os setores
+laterais 4 e 8 foram girados em mais 180° para leitura por quem está fora da mesa.
 
 **Próxima etapa:** concluir o aceite da etapa 2 no tablet pela LAN: confirmar
-dez contatos simultâneos entre tokens e controles, ajuste compartilhado sem
-scroll/zoom involuntário, fullscreen, áudio e cancelamento de ponteiros. Só
-depois avançar para início da partida e pausa.
+dez contatos simultâneos entre tokens e controles, agora com abas e controles
+por ponteiro, sem scroll/zoom involuntário, fullscreen, áudio e cancelamento.
+Só depois avançar para início da partida e pausa.
 
 **Primeiro marco jogável:** entrada dos jogadores, calibração compartilhada,
 tokens com movimento simultâneo e obstáculos simples no tablet real.
@@ -110,9 +119,11 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
   `80s / sqrt(3)` e altura = `160s / sqrt(3)` (aproximadamente `92,38s`).
 - Primeiro calcular a célula; depois encaixar componentes completos de sete
   células na área útil. Nunca reduzir células automaticamente para caber mais.
-- A prévia usa um perímetro provisório de dois diâmetros de token em cada lado,
-  uma malha de componentes sem células sobrepostas e apenas componentes inteiros.
-  Os setores reais substituirão essa reserva na etapa 2.
+- A prévia usa uma malha de componentes sem células sobrepostas e apenas
+  componentes inteiros. Os setores reservam profundidade de `max(152, 64s + 56)`
+  pixels CSS, limitada a 18% da largura nas laterais e 30% da altura acima/abaixo.
+  A reserva acompanha a escala sem reduzir células; telas pequenas podem não
+  comportar a prévia, com aviso explícito.
 - A escala da prévia vai de 0,5× a 2×, sem recriar o canvas. Esse intervalo ainda
   não é uma regra definitiva nem está sincronizado com o servidor.
 - Sobras são fundo do `body` com névoa decorativa, visto pelo canvas transparente.
@@ -126,10 +137,11 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
 - Impedir scroll, zoom e gestos nativos sobre a superfície de jogo, preservando
   entrada multitoque e a atribuição de cada ponteiro ao token correto.
 - A interface durante o jogo prioriza ícones, não leitura de menus.
-- Durante a preparação, prever dicas rolantes legíveis nas quatro orientações,
-  enquanto os jogadores escolhem/configuram seus personagens. Orientar cada
-  apresentação para quem está naquele lado da mesa, sem exigir ler de cabeça
-  para baixo; os textos de ajuda são uma exceção à interface de jogo por ícones.
+- Durante a preparação, exibir quatro dicas alternadas: acima, abaixo e nos
+  dois lados da caixa central “Terror”, sempre fora dela, nunca dentro dos
+  setores. Orientar cada apresentação para quem está naquele lado da mesa;
+  todos compartilham as quatro apresentações. As dicas são uma exceção à
+  interface de jogo por ícones e não devem aumentar a reserva dos setores.
 - Dicas iniciais:
   - “Todos vocês possuem walkie-talkie e podem conversar entre si.” Começar a
     dica com um ícone próprio/licenciado de walkie-talkie.
@@ -366,8 +378,17 @@ docker compose stop
 
 ### Atributos e feedback
 
-- Força, velocidade e inteligência possuem níveis entre 1 e 3.
-- A proposta associa força a sons emitidos, velocidade a cansaço e inteligência
+- Força, destreza e inteligência possuem níveis entre 1 e 3. Destreza substitui
+  o antigo nome do atributo velocidade, inclusive na variável `dexterity` e
+  nos contratos; “velocidade” continua designando a medida física do movimento.
+- Cada jogador entra com força 1, destreza 1 e inteligência 1, e três pontos
+  disponíveis na aba de personagem. Cada “+” consome um ponto; “−” devolve um.
+  Não baixar de 1, ultrapassar 3 ou gastar mais de três pontos. Exemplos de
+  distribuição completa: 3/2/1 e 2/2/2. Pontos ainda livres ficam explicitamente
+  indicados; prontidão e sua validação pertencem à etapa 3.
+- A distribuição é independente por jogador e atualiza o token de calibração
+  e o token no tabuleiro. Não grava movimentos/definições locais no PostgreSQL.
+- A proposta associa força a sons emitidos, destreza a cansaço e inteligência
   a comportamento desastrado. Fórmulas e a direção dessas compensações ainda
   precisam ser esclarecidas antes de implementar o balanceamento.
 - Força também influencia a representação de altura do personagem, sem romper
@@ -375,7 +396,7 @@ docker compose stop
 - Indicadores na borda interna do token mostram níveis exigidos e utilizados,
   sempre dentro do diâmetro máximo calibrado.
 - Referência visual fornecida pelo usuário: disco central azul e faixas em arco
-  na periferia para força, velocidade, inteligência e demais status. As áreas
+  na periferia para força, destreza, inteligência e demais status. As áreas
   vermelha, verde e roxa do exemplo representam regiões de indicadores; a
   associação definitiva entre cores e atributos ainda não foi escolhida.
 - O diâmetro externo de toda a composição (centro mais faixas) é `64s` pixels
@@ -417,7 +438,7 @@ docker compose stop
   não de alternância entre jogadores.
 - Exemplos iniciais: atravessar uma célula pequena em uma unidade base,
   colocar/rearmar/recolher armadilha em um turno, sair dela em cinco turnos.
-- Velocidade não altera a duração de ações inicialmente; movimento tem suas
+- Destreza não altera a duração de ações inicialmente; movimento tem suas
   próprias regras de velocidade e multiplicadores.
 - Guardar durações base e multiplicadores configuráveis no conteúdo do banco.
   A duração em segundos de um turno ainda não foi escolhida.
@@ -436,7 +457,7 @@ docker compose stop
   em uso. Não desenhar esses indicadores no tablet nem transmiti-los na visão
   da partida destinada aos jogadores.
 - No app do monstro, o controlador pode ver os status em uso dos jogadores,
-  como níveis de força, velocidade e inteligência utilizados naquele momento.
+  como níveis de força, destreza e inteligência utilizados naquele momento.
   Essa informação pertence à visão do monstro, não a um painel compartilhado.
 - Indicadores de um jogador acompanham sua visibilidade/revelação para o monstro:
   não revelar posição ou status atuais de um jogador oculto pela névoa por meio
@@ -456,7 +477,7 @@ licenciada selecionada: não baixar/reproduzir automaticamente a imagem citada
 na proposta nem assumir direitos de uso sobre personagem, imagens ou áudio.
 Usar placeholders próprios ou assets com licença verificada no protótipo.
 
-- Força 2, velocidade 2, inteligência 2; multiplicador de movimento 1,2.
+- Força 2, destreza 2, inteligência 2; multiplicador de movimento 1,2.
 - Pode interagir com os terrenos conforme seus atributos.
 - Contato coloca o jogador em sono/pesadelo, com névoa vermelha no token/setor.
 - Se todos os participantes em jogo estiverem dormindo, o monstro vence.
@@ -509,7 +530,7 @@ porque o código compila: verificar a experiência ou regra correspondente.
 - [x] PostgreSQL persistente, migrações e conteúdo mínimo de desenvolvimento.
 - [x] API validada, conexão Socket.IO e lobby em memória.
 - [x] Comandos de build, testes e execução documentados e validados.
-- [ ] Completar aceite de acesso pela LAN no tablet real.
+- [x] Completar aceite de acesso pela LAN no tablet real.
 
 **Aceite:** tablet alcança o cliente/servidor pela LAN; saúde dos serviços
 verificada; dado de teste persiste após recriar o container; admin pode ser
@@ -525,12 +546,22 @@ desligado sem interromper jogo/servidor.
 - [x] Dicas de preparação nas quatro orientações, incluindo walkie-talkie.
 - [x] Token com disco central e faixas internas de status conforme referência,
   sem ultrapassar o diâmetro calibrado.
+- [x] Setores com abas de token e personagem; controles ativados por ponteiro,
+  sem depender de cliques sintetizados em gestos multitoque.
+- [x] Distribuição local de três pontos, base 1/1/1 e limites 1–3, com reembolso,
+  contador individual e atualização dos indicadores F/D/I.
+- [x] Quatro dicas externas à central e setores compactos; atributos laterais
+  organizados em linhas nas telas de menor altura para não cortar controles.
 
 **Aceite:** pelo menos dez contatos simultâneos no dispositivo real, incluindo
 tokens e controles, sem roubar gestos; ajustar um círculo escala todos; não há
-scroll/zoom involuntário nem sobreposição que impeça jogar. Ainda pendente:
-verificar todos esses comportamentos no tablet real e registrar eventuais
-limitações do navegador/hardware.
+scroll/zoom involuntário nem sobreposição que impeça jogar. O usuário confirmou
+LAN, escala comum e arrasto de todos os tokens, mas identificou bloqueio do
+seletor e de +/− durante o arrasto. Após substituir o seletor por abas e tratar
+controles por ponteiro, Chromium/CDP validou oito tokens e dois controles
+simultâneos, troca de aba, toque sem duplicação e cancelamento. Ainda pendente:
+repetir esse cenário no tablet, incluindo os novos controles de atributos,
+e validar fullscreen, áudio e gestos nativos.
 
 ### 3. Início, capítulo e pausa
 
@@ -635,6 +666,10 @@ sem duplicar controladores ou expor informações ocultas.
 | 2026-10-31 | Token máximo 64 px, folga 8 px por lado, indicadores internos, prévia de vários terrenos proporcional e admin sem login. | Build/typecheck e dez testes unitários, incluindo encaixe sem sobreposição, contenção de células e redução de capacidade ao aumentar a escala. Calibração compartilhada e setores reais ainda pendentes. |
 | 2026-11-01 | Regras de visibilidade de status, duas dicas nas quatro orientações e referência do token com faixas internas registradas. | Atualização documental; indicadores, dicas e filtragem do catálogo ainda não implementados. |
 | 2026-11-01 | Etapa 2 no cliente: oito setores, seleção básica, escala compartilhada, área útil responsiva, tokens arrastáveis, dicas orientadas, fullscreen e autorização de áudio. | `npm run typecheck`, `npm test` (8 contratos e 3 testes do servidor), `npm run build`; navegador com mock efêmero confirmou seleção, escala comum, arrasto e ativação de fullscreen/áudio. Acesso LAN e dez toques simultâneos no tablet real continuam pendentes. |
+| 2026-11-01 | Versão atual publicada para o aceite no tablet; QR code local entregue com o endereço LAN do notebook. | `docker compose up --build -d --wait postgres server game`, serviços saudáveis e `npm run check:stack` passaram; endpoint de saúde acessível pela interface Wi-Fi do Windows. Abertura no tablet e aceite dos dez toques ainda aguardam validação física. |
+| 2026-11-01 | Usuário confirmou LAN, calibração compartilhada e arrasto de todos os tokens; relatou controles bloqueados durante arrasto. Setores reorganizados em abas de token/personagem, sem seletor nativo, com botão multitoque reutilizável. | Typecheck, 11 testes unitários, build local/Docker do jogo e `check:stack` passaram. Chromium/CDP confirmou oito tokens + dois controles, +/−, abas, continuidade do arrasto, toque sem duplicação, cancelamento, mouse e teclado. Somente o container game foi atualizado; reteste físico pendente no mesmo endereço/QR. |
+| 2026-11-01 | Atributos base 1/1/1 e três pontos distribuíveis; velocidade renomeada para destreza nos contratos, variáveis e indicadores; migração 002 preserva níveis do conteúdo existente. Quatro dicas externas à central e menor reserva dos setores liberam mapa. | `npm run typecheck`, `npm test` (9 contratos + 3 servidor), `npm run build`, integração em PostgreSQL isolado pelo perfil `test` e `npm run check:stack` passaram. Servidor/jogo publicados com volume preservado. Navegador confirmou distribuição 3/2/1, reembolso para 2/2/2, independência entre setores, oito tokens + dois controles de atributos e continuidade do arrasto. Disputa simultânea pelo último ponto respeitou o orçamento. Em 1920×1200 CSS/escala 2 e 960×600 CSS/escala 1, controles e dicas não cortam nem sobrepõem os setores/central; ajuste lateral republicado. Aceite físico dos novos controles ainda pendente. |
+| 2026-11-01 | Corrigida a inversão dos tokens iniciais dos setores 5/7 e acrescentados 180° à orientação dos setores 4/8. | `npm run build -w @terror/game` e publicação somente do jogo passaram. Navegador em 1920×1200 confirmou os centros renderizados dos tokens 5/7 em x≈475/1445, respectivamente, e as matrizes CSS de rotação dos setores laterais. Reteste físico pendente; próxima etapa continua sendo o aceite da mesa. |
 
 Adicionar novas linhas com entregas reais e evidências de validação. Não listar
 como concluídos comportamentos ainda apenas planejados.

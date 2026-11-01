@@ -1,13 +1,35 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { attributesSchema, matchSnapshotSchema, parseApiResponse, settingsSchema } from "./index.js";
+import {
+  allocateAttributePoint, attributesSchema, availableAttributePoints, initialPlayerAttributes,
+  matchSnapshotSchema, parseApiResponse, playerAttributesSchema, settingsSchema,
+} from "./index.js";
 import { boardArea, cellDimensions, hexCorners, terrainLayout } from "./layout.js";
 
 test("attributes reject out-of-range values and unknown properties", () => {
-  assert.equal(attributesSchema.safeParse({ strength: 0, speed: 2, intelligence: 2 }).success, false);
-  assert.equal(attributesSchema.safeParse({ strength: 2, speed: 4, intelligence: 2 }).success, false);
-  assert.equal(attributesSchema.safeParse({ strength: 2, speed: 2, intelligence: 2, extra: true }).success, false);
-  assert.equal(attributesSchema.safeParse({ strength: 2, speed: 2, intelligence: 2 }).success, true);
+  assert.equal(attributesSchema.safeParse({ strength: 0, dexterity: 2, intelligence: 2 }).success, false);
+  assert.equal(attributesSchema.safeParse({ strength: 2, dexterity: 4, intelligence: 2 }).success, false);
+  assert.equal(attributesSchema.safeParse({ strength: 2, dexterity: 2, intelligence: 2, extra: true }).success, false);
+  assert.equal(attributesSchema.safeParse({ strength: 2, dexterity: 2, intelligence: 2 }).success, true);
+  assert.equal(attributesSchema.safeParse({ strength: 2, speed: 2, intelligence: 2 }).success, false);
+});
+
+test("players start at one and can allocate and refund exactly three points", () => {
+  const initial = initialPlayerAttributes();
+  assert.deepEqual(initial, { strength: 1, dexterity: 1, intelligence: 1 });
+  assert.equal(availableAttributePoints(initial), 3);
+  const strength2 = allocateAttributePoint(initial, "strength", 1);
+  const strength3 = allocateAttributePoint(strength2, "strength", 1);
+  const allocated = allocateAttributePoint(strength3, "dexterity", 1);
+  assert.deepEqual(allocated, { strength: 3, dexterity: 2, intelligence: 1 });
+  assert.equal(availableAttributePoints(allocated), 0);
+  assert.throws(() => allocateAttributePoint(allocated, "intelligence", 1));
+  assert.throws(() => allocateAttributePoint(strength3, "strength", 1));
+  assert.throws(() => allocateAttributePoint(initial, "intelligence", -1));
+  assert.equal(availableAttributePoints(allocateAttributePoint(allocated, "strength", -1)), 1);
+  assert.equal(availableAttributePoints({ strength: 2, dexterity: 2, intelligence: 2 }), 0);
+  assert.equal(playerAttributesSchema.safeParse({ strength: 3, dexterity: 3, intelligence: 3 }).success, false);
+  assert.deepEqual(initial, initialPlayerAttributes());
 });
 
 test("settings enforce the agreed geometry and touch requirements", () => {
@@ -77,9 +99,10 @@ test("whole seven-cell terrains fit the usable area without overlap or clipping"
 
 test("the playable area reserves all eight player sectors at each viewport size", () => {
   const area = boardArea(1920, 1200);
-  assert.deepEqual(area, { x: 230, y: 230, width: 1460, height: 740 });
-  assert.deepEqual(boardArea(800, 600), { x: 128, y: 132, width: 544, height: 336 });
-  assert.deepEqual(boardArea(100, 100), { x: 16, y: 22, width: 68, height: 56 });
+  assert.deepEqual(area, { x: 152, y: 152, width: 1616, height: 896 });
+  assert.deepEqual(boardArea(800, 600), { x: 144, y: 152, width: 512, height: 296 });
+  assert.deepEqual(boardArea(100, 100), { x: 18, y: 30, width: 64, height: 40 });
+  assert.deepEqual(boardArea(1920, 1200, 2), { x: 184, y: 184, width: 1552, height: 832 });
   assert.deepEqual(boardArea(0, 0), { x: 0, y: 0, width: 0, height: 0 });
   assert.throws(() => boardArea(Infinity, 100));
 });

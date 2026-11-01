@@ -1,15 +1,38 @@
 import { z } from "zod";
 
 export { parseApiResponse } from "./http.js";
-export { boardArea, cellDimensions, hexCorners, terrainLayout } from "./layout.js";
+export { boardArea, cellDimensions, hexCorners, playerSectorDepth, terrainLayout } from "./layout.js";
 
 const attributeSchema = z.number().int().min(1).max(3);
 
 export const attributesSchema = z.strictObject({
   strength: attributeSchema,
-  speed: attributeSchema,
+  dexterity: attributeSchema,
   intelligence: attributeSchema,
 });
+
+export type Attributes = z.infer<typeof attributesSchema>;
+export type AttributeName = keyof Attributes;
+export const ATTRIBUTE_POINTS = 3;
+
+export const playerAttributesSchema = attributesSchema.refine(
+  (attributes) => attributes.strength + attributes.dexterity + attributes.intelligence <= 3 + ATTRIBUTE_POINTS,
+  "A distribuição excede os três pontos disponíveis.",
+);
+
+export function initialPlayerAttributes(): Attributes {
+  return { strength: 1, dexterity: 1, intelligence: 1 };
+}
+
+export function availableAttributePoints(attributes: Attributes): number {
+  const validated = playerAttributesSchema.parse(attributes);
+  return 3 + ATTRIBUTE_POINTS - validated.strength - validated.dexterity - validated.intelligence;
+}
+
+export function allocateAttributePoint(attributes: Attributes, attribute: AttributeName, delta: 1 | -1): Attributes {
+  const validated = playerAttributesSchema.parse(attributes);
+  return playerAttributesSchema.parse({ ...validated, [attribute]: validated[attribute] + delta });
+}
 
 export const characterSchema = z.strictObject({
   id: z.string().min(1),

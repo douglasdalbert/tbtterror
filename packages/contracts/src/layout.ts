@@ -32,11 +32,16 @@ export function hexCorners(center: Point, radius: number): Point[] {
   });
 }
 
-export function boardArea(width: number, height: number) {
+export function playerSectorDepth(scale: number): number {
+  return Math.max(152, cellDimensions(scale).tokenDiameter + 56);
+}
+
+export function boardArea(width: number, height: number, scale = 1) {
   z.number().nonnegative().finite().parse(width);
   z.number().nonnegative().finite().parse(height);
-  const horizontalInset = Math.min(230, width * 0.16);
-  const verticalInset = Math.min(230, height * 0.22);
+  const sectorDepth = playerSectorDepth(scale);
+  const horizontalInset = Math.min(sectorDepth, width * 0.18);
+  const verticalInset = Math.min(sectorDepth, height * 0.3);
   return {
     x: horizontalInset,
     y: verticalInset,
@@ -49,7 +54,7 @@ export function terrainLayout(width: number, height: number, scale: number) {
   z.number().nonnegative().finite().parse(width);
   z.number().nonnegative().finite().parse(height);
   const dimensions = cellDimensions(scale);
-  const area = boardArea(width, height);
+  const area = boardArea(width, height, scale);
   const origin = { x: width / 2, y: height / 2 };
   const toPixel = ({ q, r }: Axial): Point => ({
     x: origin.x + dimensions.width * (q + r / 2),
