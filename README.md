@@ -39,12 +39,15 @@ desaparecem, inclusive durante a pausa; prontidão, pausa, retomada e saída
 continuam disponíveis nos respectivos estados. A entrada escolhe
 três letras (AAA inicialmente), sem duplicar nomes na mesma mesa; abre a aba
 de jogo com “Estou pronto”, sem botão de menu para essa aba. Nome fica no extremo
-superior da coluna esquerda e saída no inferior, com confirmação no próprio setor.
+superior da coluna esquerda e X no inferior. Em token/personagem, o X apenas
+volta ao painel de jogo; estando no jogo, abre a confirmação de saída no setor.
+O nome acessível do botão acompanha a ação: voltar ou sair.
 Setores reservam 96 px CSS, independentemente da escala, em vez de 116–140 px.
 A miniatura interna mede sempre 64 px; somente tokens externos e terrenos escalam.
 Atributos usam
 ícones com explicação provisória em modal interno, contador verde +3/+2/+1/+0 e
-alerta vermelho na aba enquanto faltam pontos a distribuir. Cada propriedade
+alerta vermelho na aba enquanto faltam pontos a distribuir. O painel de atributos
+tem 8 px de padding à esquerda para afastar o contador da coluna de nome/saída. Cada propriedade
 centraliza ícone, valor, − e + na mesma linha da sua coluna; quando o painel
 tem até 320 px de largura, ícone/valor ficam acima de −/+ para preservar
 alvos de toque, conforme alternativa aprovada pelo usuário. O jogador distribui
@@ -88,7 +91,8 @@ Correção publicada somente no jogo e validada no navegador; reteste físico
 da abertura permanece pendente.
 
 **Próxima etapa:** recarregar a página no tablet e confirmar que não fica preta;
-retestar a navegação de configurações sem menu “Jogo”, seu desaparecimento
+retestar a navegação de configurações sem menu “Jogo”, retorno pelo X antes
+da confirmação de saída, seu desaparecimento
 após o início, setores de 96 px, atributos compactos/responsivos,
 miniatura fixa, tokens grandes/pequenos, bloqueio de setor,
 dez contatos e o fluxo de prontidão/contagem/cancelamento/pausa/retomada. O usuário
@@ -165,12 +169,17 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
   de A a Z, começando em AAA. As rodas reutilizáveis aceitam botões, arrasto,
   roda do mouse e setas do teclado, com volta entre A/Z. Nomes duplicados são
   rejeitados atomicamente no servidor, inclusive em entradas simultâneas.
+  O diálogo tem duas colunas: título alinhado ao topo e fechar abaixo na
+  esquerda; letras e “Entrar” centralizados na direita, usando toda a altura.
+  As rodas têm controles de 24 px e letras de 28 px, sem reservar uma faixa
+  horizontal para o título. Outros diálogos preservam seu cabeçalho original.
 - Após entrar, o painel de jogo abre com a confirmação “Estou pronto”, sem
   botão de menu próprio. Nome e saída ficam nas extremidades superior/inferior
   da coluna esquerda; calibração e atributos ficam à direita, em uma coluna
   vertical de botões de 32 px CSS somente durante a preparação.
   Tocar a configuração selecionada novamente ou Escape retorna ao jogo.
-  O botão de saída tem o mesmo tamanho das abas e exige confirmação.
+  O X tem o mesmo tamanho das abas: nas configurações volta ao jogo, sem
+  solicitar saída; no painel de jogo abre a confirmação de saída.
   A confirmação para retomar a pausa reutiliza a estrutura de prontidão.
 - Modais cobrem somente o próprio setor, com fechamento por botão ou Escape,
   foco de teclado contido e controles de fundo inativos. Erros de entrada/ação
@@ -878,6 +887,12 @@ sem duplicar controladores ou expor informações ocultas.
 | 2026-11-01 | Botão do menu “Jogo” removido; painel padrão preservado e retorno pela configuração selecionada ou Escape. Token/personagem e sua coluna ocultos após a contagem inicial, inclusive na pausa, sem alterar a reserva geométrica necessária à calibração/atributos. | `npm run build -w @terror/game`, cinco testes existentes do jogo, publicação somente de `game` com `--no-deps` e `npm run check:stack` passaram. Página isolada no navegador, com Socket.IO simulado e sem alterar a mesa ocupada, confirmou ausência de menu Jogo, abertura/retorno de token, atributos/Escape/setas, duas abas na contagem e nenhuma em capítulo/partida/pausa, painel de pausa/retomada disponível, duas colunas após início e retorno à prontidão/configurações no lobby, sem erros JavaScript. Reteste físico pendente; servidor e banco não reiniciados. |
 
 | 2026-11-01 | Setores compactados para 96 px CSS fixos; nome no topo e saída no rodapé da coluna esquerda; miniatura interna fixa em 64 px, preservando escala externa. Atributos centralizados por coluna como ícone/valor/−/+; alternativa responsiva aprovada mantém ícone/valor acima de −/+ em painéis estreitos. Rodas de nome compactadas sem rolagem interna. Reserva compartilhada de mapa e teste de limites de movimento atualizados. | `npm run build`, `npm test` (12 contratos + 10 servidor + 5 jogo), integração API/Socket.IO em PostgreSQL isolado pelo perfil `test`, builds/publicação de servidor e jogo e `npm run check:stack` passaram. Servidor recriado com autorização do usuário; volume da partida preservado. Navegador real confirmou distribuição/reembolso, modal, nome/saída nas extremidades, miniatura ≈64 px antes/depois de escala 1→2 e token externo 128 px com menos terrenos. Layout final mediu atributos em linha com altura ≈32 px em 1920×1200 CSS e duas linhas ≈66 px em 960×600, com botões ≈27 px de largura nessa tela; entrada sem rolagem. Página isolada com oito jogadores confirmou setores de 96 px nas duas resoluções, nenhum controle cortado, miniaturas fixas em escala 2 e configurações ocultas em partida/pausa, sem erros JavaScript. Mesa de teste devolvida ao lobby vazio/escala 1 e PostgreSQL de teste parado; aceite físico de controles compactos, rodas menores e dez contatos permanece pendente. |
+
+| 2026-11-01 | X contextual do setor: em configuração de token/personagem volta ao painel de jogo; somente nesse painel abre confirmação de saída. Nome acessível acompanha a ação. | Build local/Docker de `@terror/game`, publicação somente de `game` com `--no-deps` e `npm run check:stack` passaram. Página isolada com Socket.IO simulado confirmou ambas as configurações → X → prontidão sem diálogo/comando de saída, segundo X → confirmação, cancelamento e confirmação por teclado/clique emitindo exatamente um comando de saída, sem erros JavaScript. Mesa real não alterada; servidor/banco não reiniciados. Reteste físico continua pendente. |
+
+| 2026-11-01 | Padding esquerdo de 8 px no painel de atributos para afastar o contador +N. | Build/typecheck Docker do jogo e publicação somente de `game` passaram; container saudável. Página isolada com CSS publicado confirmou padding computado de 8 px e painel de 204 px sem overflow horizontal. Servidor/banco e mesa real não alterados; reteste físico pendente. |
+
+| 2026-11-01 | Escolha de nome em duas colunas: título no topo à esquerda e fechamento abaixo; letras/entrada usam toda a altura à direita. Controles das rodas restaurados para 24 px e letras para 28 px, sem afetar outros modais. | Build/typecheck Docker e publicação somente de `game` passaram; container saudável. Navegador isolado com Socket.IO simulado confirmou os oito setores em 1920×1200 e 960×600 CSS (16 diálogos), duas colunas, 86 px de altura útil sem rolagem horizontal/vertical, alteração de letra e fechamento por Escape. Mesa real e servidor/banco preservados; reteste físico pendente. |
 
 Adicionar novas linhas com entregas reais e evidências de validação. Não listar
 como concluídos comportamentos ainda apenas planejados.

@@ -85,9 +85,13 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, p
             <>
               <nav className="sector-identity" aria-label={`Jogador ${identity}`}>
                 <strong className="player-name">{name}</strong>
-                <TouchButton className="leave-button" aria-label={`Sair ${identity}`}
+                <TouchButton className="leave-button"
+                  aria-label={shownTab === "game" ? `Sair ${identity}` : `Voltar ao jogo de ${identity}`}
                   disabled={busy}
-                  onPress={() => setDialog("leave")}><TabIcon tab="leave" /></TouchButton>
+                  onPress={() => {
+                    if (shownTab !== "game") setActiveTab("game");
+                    else setDialog("leave");
+                  }}><TabIcon tab="leave" /></TouchButton>
               </nav>
               <div id={`${panelId}-content`} className="player-setup"
                 role={shownTab === "game" ? "region" : "tabpanel"} tabIndex={-1}
