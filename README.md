@@ -20,6 +20,7 @@ aqui prevalecem sobre alternativas antigas dessa proposta.
 - [x] Implementar início, capítulo e pausa autoritativos sobre a geometria atual.
 - [x] Validar acesso LAN no tablet real.
 - [x] Corrigir falha de inicialização em HTTP da LAN e validar no navegador.
+- [x] Ocultar menu de jogo e configurações após o início, preservando os controles da partida.
 - [ ] Completar o aceite de dez contatos entre tokens e controles no tablet.
 
 **Estado:** etapas 2 e 3 implementadas sobre a geometria de prévia. O servidor
@@ -28,10 +29,15 @@ capítulo e pausa em memória, com contratos validados e comandos Socket.IO.
 Objetivos, obstáculos e mapa procedural jogável permanecem para a etapa 4.
 Fullscreen e áudio são autorizados por interação; quatro dicas orientadas ficam
 fora da caixa central, uma em cada lado, sem ocupar os setores. Cada setor
-ocupado tem duas colunas verticais: nome/saída à esquerda e abas de jogo,
-token e personagem à direita, com painel central compacto. A entrada escolhe
+ocupado tem nome/saída à esquerda e, somente na preparação, abas de token e
+personagem à direita, com painel central compacto. O botão da aba “Jogo” não
+ocupa espaço: seu painel é o padrão, e tocar novamente na configuração
+selecionada volta à prontidão. Escape também retorna ao painel de jogo.
+Após terminar a contagem inicial, as duas abas de configuração e sua coluna
+desaparecem, inclusive durante a pausa; prontidão, pausa, retomada e saída
+continuam disponíveis nos respectivos estados. A entrada escolhe
 três letras (AAA inicialmente), sem duplicar nomes na mesma mesa; abre a aba
-de jogo com “Estou pronto”. Saída fica logo abaixo do nome e exige confirmação
+de jogo com “Estou pronto”, sem botão de menu para essa aba. Saída fica logo abaixo do nome e exige confirmação
 no próprio setor. Atributos usam
 ícones com explicação provisória em modal interno, contador verde +3/+2/+1/+0 e
 alerta vermelho na aba enquanto faltam pontos a distribuir. O jogador distribui
@@ -75,7 +81,8 @@ Correção publicada somente no jogo e validada no navegador; reteste físico
 da abertura permanece pendente.
 
 **Próxima etapa:** recarregar a página no tablet e confirmar que não fica preta;
-retestar tokens grandes/pequenos, bloqueio de setor,
+retestar a navegação de configurações sem menu “Jogo”, seu desaparecimento
+após o início, tokens grandes/pequenos, bloqueio de setor,
 dez contatos e o fluxo de prontidão/contagem/cancelamento/pausa/retomada. O usuário
 autorizou avançar à etapa 3 com essa limitação registrada, sem marcar o aceite
 físico como concluído. A próxima implementação é a etapa 4 (mapa procedural e
@@ -853,6 +860,8 @@ sem duplicar controladores ou expor informações ocultas.
 | 2026-11-01 | Nome de três letras no token e na calibração; nove marcadores compartilhados de punho, pé em movimento e lâmpada, com estados vazio/preenchido. Conforme decisão do usuário, permanecem vazios até existir uso real dos atributos. Fechar modal usa X vetorial centrado. Retomada exige dez segundos canceláveis, com votos preservados ao desmarcar, reinício em dez e cancelamento por saída/desconexão. | Typecheck, `npm test` (12 contratos + 10 servidor), `npm run build`, integração API/Socket.IO em PostgreSQL isolado e `npm run check:stack` passaram. Servidor/jogo publicados com autorização para encerrar a partida anterior. Navegador verificou nove marcadores vazios nos dois renderizadores, variantes vazias/preenchidas, nome seguindo arrasto nativo a 128 px, X exatamente centrado no botão, retomada 10→8 com posições/relógio congelados, cancelamento preservando outros votos, reinício em dez, recarga invalidando contagem/votos e saída cancelando a contagem. Mesa de teste devolvida ao lobby vazio na escala 1; volume preservado e banco de teste parado. Reteste físico continua sendo a próxima etapa; mapa procedural permanece para quando solicitado. |
 
 | 2026-11-01 | Corrigida tela preta no Chrome em HTTP pela LAN: UUID v4 via `getRandomValues`, identidade por aba preservada e falhas de inicialização exibidas na central. Cinco testes do jogo incluídos no runner principal. | `npm run test -w @terror/game`, `npm run build -w @terror/game`, `npm test` (12 contratos + 10 servidor + 5 jogo), publicação somente de `game` com `--no-deps` e `npm run check:stack` passaram. Navegador em `http://192.168.68.108:8080` confirmou contexto não seguro sem `randomUUID`, conexão, oito setores, mesma identidade após recarga e canvas/viewport/área de rolagem coincidentes em 1200×750 e 2400×1500 CSS, sem erros JavaScript. Armazenamento bloqueado simulado mostrou alerta e indicador vermelho, preservando canvas e setores. Servidor/banco não reiniciados; abertura no tablet físico e dez contatos continuam pendentes. |
+
+| 2026-11-01 | Botão do menu “Jogo” removido; painel padrão preservado e retorno pela configuração selecionada ou Escape. Token/personagem e sua coluna ocultos após a contagem inicial, inclusive na pausa, sem alterar a reserva geométrica necessária à calibração/atributos. | `npm run build -w @terror/game`, cinco testes existentes do jogo, publicação somente de `game` com `--no-deps` e `npm run check:stack` passaram. Página isolada no navegador, com Socket.IO simulado e sem alterar a mesa ocupada, confirmou ausência de menu Jogo, abertura/retorno de token, atributos/Escape/setas, duas abas na contagem e nenhuma em capítulo/partida/pausa, painel de pausa/retomada disponível, duas colunas após início e retorno à prontidão/configurações no lobby, sem erros JavaScript. Reteste físico pendente; servidor e banco não reiniciados. |
 
 Adicionar novas linhas com entregas reais e evidências de validação. Não listar
 como concluídos comportamentos ainda apenas planejados.

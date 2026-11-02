@@ -13,11 +13,10 @@ const attributeLabels: { attribute: AttributeName; label: string }[] = [
 ];
 
 const tabs = [
-  { tab: "game", label: "Jogo" },
   { tab: "token", label: "Token" },
   { tab: "character", label: "Personagem" },
 ] as const;
-type Tab = typeof tabs[number]["tab"];
+type Tab = "game" | typeof tabs[number]["tab"];
 type Dialog = "join" | "leave" | AttributeName | null;
 
 export function PlayerSector({ slot, name, attributes, error, canEnter, scale, phase, ready, resumeReady, moving, controllable, busy, onEnter, onLeave, onClearError, onAttribute, onScale, onReady, onPause, onResume }: {
@@ -57,7 +56,7 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, p
   useEffect(() => {
     if (attributes && dialog === "join") {
       setDialog(null);
-      document.getElementById(`${panelId}-game`)?.focus();
+      document.getElementById(`${panelId}-content`)?.focus();
     }
   }, [attributes, dialog, panelId]);
   const side = slot === 3 || slot === 7;
@@ -90,8 +89,16 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, p
                   disabled={busy}
                   onPress={() => setDialog("leave")}><TabIcon tab="leave" /></TouchButton>
               </nav>
-              <div id={`${panelId}-content`} className="player-setup" role="tabpanel"
-                aria-labelledby={`${panelId}-${shownTab}`}>
+              <div id={`${panelId}-content`} className="player-setup"
+                role={shownTab === "game" ? "region" : "tabpanel"} tabIndex={-1}
+                aria-label={shownTab === "game" ? `Jogo de ${identity}` : undefined}
+                aria-labelledby={shownTab === "game" ? undefined : `${panelId}-${shownTab}`}
+                onKeyDown={(event) => {
+                  if (event.key !== "Escape" || shownTab === "game") return;
+                  event.preventDefault();
+                  setActiveTab("game");
+                  event.currentTarget.focus();
+                }}>
                 {shownTab === "game" && (
                   <div className="game-controls">
                     {(phase === "lobby" || phase === "countdown") && (
@@ -142,32 +149,36 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, p
                   </div>
                 )}
               </div>
-              <div className="sector-tabs" role="tablist" aria-orientation="vertical"
+              {!locked && <div className="sector-tabs" role="tablist" aria-orientation="vertical"
                 aria-label={`Configuração de ${identity}`}>
                 {tabs.map(({ tab, label }) => (
                   <TouchButton key={tab} id={`${panelId}-${tab}`} role="tab"
-                    aria-label={!locked && label === "Personagem" && availablePoints > 0
+                    aria-label={label === "Personagem" && availablePoints > 0
                       ? `Personagem, ${availablePoints} pontos disponíveis` : label}
-                    alert={!locked && tab === "character" && availablePoints > 0}
-                    disabled={locked && tab !== "game"}
+                    alert={tab === "character" && availablePoints > 0}
                     aria-selected={shownTab === tab} aria-controls={`${panelId}-content`}
-                    tabIndex={shownTab === tab ? 0 : -1}
+                    tabIndex={shownTab === tab || (shownTab === "game" && tab === "token") ? 0 : -1}
                     onKeyDown={(event) => {
-                      if (locked) return;
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        setActiveTab("game");
+                        document.getElementById(`${panelId}-content`)?.focus();
+                        return;
+                      }
                       if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
                       event.preventDefault();
                       const index = tabs.findIndex((item) => item.tab === tab);
-                      const nextTab = event.key === "Home" ? "game" : event.key === "End" ? "character"
-                        : tabs[(index + (event.key === "ArrowDown" ? 1 : 2)) % tabs.length]?.tab;
+                      const nextTab = event.key === "Home" ? "token" : event.key === "End" ? "character"
+                        : tabs[(index + (event.key === "ArrowDown" ? 1 : tabs.length - 1)) % tabs.length]?.tab;
                       if (!nextTab) return;
                       setActiveTab(nextTab);
                       event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(
                         `button[id="${panelId}-${nextTab}"]`,
                       )?.focus();
                     }}
-                    onPress={() => setActiveTab(tab)}><TabIcon tab={tab} /></TouchButton>
+                    onPress={() => setActiveTab((current) => current === tab ? "game" : tab)}><TabIcon tab={tab} /></TouchButton>
                 ))}
-              </div>
+              </div>}
             </>
           ) : (
             <div className="join-area">
