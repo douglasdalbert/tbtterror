@@ -4,7 +4,7 @@ import { parseEnv } from "node:util";
 import { once } from "node:events";
 import { io } from "socket.io-client";
 import {
-  adminOverviewSchema, catalogSchema, healthSchema, matchSnapshotSchema,
+  adminOverviewSchema, publicCatalogSchema, healthSchema, matchSnapshotSchema,
 } from "../packages/contracts/dist/index.js";
 
 const environment = parseEnv(await readFile(new URL("../.env", import.meta.url), "utf8"));
@@ -18,7 +18,8 @@ async function json(path, schema) {
 }
 
 await json(`${gameUrl}/api/health`, healthSchema);
-const catalog = await json(`${gameUrl}/api/catalog`, catalogSchema);
+const catalog = await json(`${gameUrl}/api/catalog`, publicCatalogSchema);
+assert.ok(catalog.monsters.every((monster) => !("attributes" in monster) && !("capabilities" in monster)));
 const snapshot = await json(`${gameUrl}/api/match`, matchSnapshotSchema);
 assert.equal(snapshot.catalogRevision, catalog.revision);
 const gamePage = await fetch(gameUrl, { signal: AbortSignal.timeout(5000) });

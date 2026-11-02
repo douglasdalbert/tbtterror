@@ -24,18 +24,27 @@ aqui prevalecem sobre alternativas antigas dessa proposta.
 - [x] Compactar setores, fixar miniatura interna e reorganizar atributos horizontalmente.
 - [x] Selecionar cor exclusiva para cada token durante a entrada do jogador.
 - [x] Completar no tablet o aceite do fluxo de entrada, controles e dez contatos simultâneos.
+- [x] Implementar limites de movimento, colisões, descoberta compartilhada e catálogo público filtrado (etapa 5).
+- [ ] Validar visualmente mapa modular, movimento, barreiras e névoa no tablet.
+- [ ] Definir regras dos objetivos antes de validar sua alcançabilidade.
 
 **Estado:** etapas 2 e 3 tiveram o aceite físico confirmado pelo usuário.
-Iniciada a etapa 4: há três módulos iniciais tipados e uma geração determinística
-por seed que monta componentes conectados, aplica rotações de 60° e respeita a
-área útil e a escala. O servidor retém o mapa e transmite a seed; o cliente usa
-o mesmo gerador para renderizar os tipos de célula sem enviar toda a geometria
-em cada snapshot. Ainda faltam a validação de objetivos alcançáveis
-(regras não definidas) e o aceite visual do mapa gerado no tablet. O servidor
-agora mantém participantes, atributos, escala, posições, prontidão, contagem,
-capítulo, pausa e cores dos tokens em memória, com contratos validados e
-comandos Socket.IO. A geração recusa iniciar se o mapa não comportar todos os
-jogadores. A validação de objetivos, obstáculos e movimento permanece pendente.
+A etapa 4 tem quatro módulos iniciais tipados e geração determinística por seed,
+com encaixes conectados, rotações de 60° e dimensionamento pela área útil e
+escala. O servidor mantém o mapa completo; clientes não recebem a seed nem
+células ainda ocultas. A validação de objetivos (regras ainda não definidas) e
+o aceite visual do mapa no tablet continuam pendentes. A etapa 5 está em
+implementação: o servidor limita movimentos pela destreza e bloqueia paredes/
+conectores incompatíveis; visão compartilhada revela células exploradas e envia
+somente terreno já descoberto, com névoa densa persistente e névoa leve
+temporária. O raio padrão é três células e pode ser alterado por
+`PLAYER_VISION_RADIUS_CELLS` no `.env` (1–12). O catálogo público já omite
+atributos e capacidades internas do monstro. Ainda faltam aceite físico,
+estados/visão próprios do monstro e a contribuição de 10% de jogadores dormindo
+quando a mecânica de sono existir. O servidor mantém participantes, atributos,
+escala, posições, prontidão, contagem, capítulo, pausa e cores dos tokens em
+memória, com contratos validados e comandos Socket.IO. A geração recusa iniciar
+se o mapa não comportar todos os jogadores.
 Fullscreen e áudio são autorizados por interação; quatro dicas orientadas ficam
 fora da caixa central, uma em cada lado, sem ocupar os setores. Cada setor
 ocupado tem nome/saída à esquerda e, somente na preparação, abas de token e
@@ -109,10 +118,11 @@ o botão de cor aleatória e o modal de cores, incluindo a cor atual destacada.
 Depois, o usuário confirmou o aceite físico do checklist no tablet e informou
 que tudo funcionou.
 
-**Próxima etapa:** testar visualmente no tablet o mapa modular recém-gerado.
-Antes de validar a alcançabilidade, definir as regras do primeiro objetivo e
-suas dependências; a exigência de força 2 para combustível continua sendo
-proposta, não decisão. Depois, iniciar movimento e visão (etapa 5).
+**Próxima etapa:** concluir os testes integrados e o aceite físico no tablet de
+movimento, colisões e névoa; também testar visualmente o mapa modular. Antes de
+validar a alcançabilidade, definir as regras do primeiro objetivo e suas
+dependências; a exigência de força 2 para combustível continua sendo proposta,
+não decisão.
 
 **Primeiro marco jogável:** entrada dos jogadores, calibração compartilhada,
 tokens com movimento simultâneo e obstáculos simples no tablet real.
@@ -662,9 +672,8 @@ docker compose stop
 - Indicadores de um jogador acompanham sua visibilidade/revelação para o monstro:
   não revelar posição ou status atuais de um jogador oculto pela névoa por meio
   dessa interface. Sono e revelações temporárias seguem suas regras específicas.
-- A projeção futura para jogadores deve separar conteúdo interno do monstro
-  do conteúdo público. O `/api/catalog` atual é um scaffold que inclui definições
-  de monstros; ainda precisa ser filtrado para cumprir essa regra na partida.
+- O `/api/catalog` público expõe apenas ID/nome dos monstros; atributos,
+  capacidades e estado do monstro não são enviados aos jogadores.
 - Monstros recebem eventos detectáveis, como som e exposição de luz, conforme
   seus próprios critérios e alcance.
 - A IA patrulha aleatoriamente e investiga pontos detectados usando rotas
@@ -810,15 +819,22 @@ continuam pendentes; esta última depende das regras ainda não decididas.
 
 ### 5. Movimento e visão
 
-- [ ] Velocidade solicitada pelo dedo, limites e indicadores.
-- [ ] Colisões e travessias por requisitos.
-- [ ] Névoa compartilhada, visão própria do monstro e modificadores de raio.
-- [ ] Filtrar status do monstro da visão dos jogadores, inclusive no catálogo
-  público; projetar status em uso dos jogadores somente na visão autorizada
-  do monstro.
+- [x] Movimento autoritativo com base de 0,5 célula/s e multiplicador
+  `1 + (destreza - 1) × 0,1`; o cliente também limita a previsão ao dedo.
+- [x] Bloqueio de células não transitáveis e conectores incompatíveis, sem
+  desvio automático; requisitos de ação/atributo aguardam regras definidas.
+- [x] Visão compartilhada de três células por padrão; raio configurável em
+  `PLAYER_VISION_RADIUS_CELLS` (1–12), névoa densa removida ao explorar e
+  névoa leve restaurada fora da visão atual.
+- [ ] Visão separada do monstro e contribuição de 10% do raio por jogadores
+  dormindo; dependem do cliente/estado de sono ainda não implementados.
+- [x] Catálogo público sem atributos/capacidades do monstro; não transmitir
+  terreno oculto, estado do monstro nem status de atributos em uso.
 
-**Aceite:** testar excesso de velocidade, barreiras e atributos insuficientes;
-o cliente do monstro não recebe posições ocultas; validar fluidez no tablet.
+**Aceite:** testes automatizados cobrem velocidade, destreza, colisões,
+conectores, união da visão e sanitização do catálogo. Ainda falta validar
+arrasto, barreiras e névoa no tablet; visão do monstro e status em uso seguem
+pendentes até existir essa perspectiva autorizada.
 
 ### 6. Interações reutilizáveis
 
@@ -920,6 +936,7 @@ sem duplicar controladores ou expor informações ocultas.
 | 2026-11-01 | Corrigida ausência do seletor no endereço LAN: a página ainda servia o bundle anterior. Publicada a build atual somente no container `game`; ajustado o modal da paleta para renderizar diretamente na área do setor e não ser recortado pelo modal do nome. | Build do jogo passou; container `game` saudável após `docker compose up --build -d --no-deps game`; servidor e PostgreSQL permaneceram sem reinício. Navegador em `http://192.168.68.108:8080` confirmou seleção aleatória no modal de nome, abertura da paleta com 16 cores e indicação da cor atual; ambos diálogos fechados sem entrar com jogador. Aceite no tablet continua pendente. |
 | 2026-11-01 | Substituída a paleta por exatamente 13 cores nomeadas conforme pedido: vermelho, azul, verde, amarelo, roxo, rosa, preto, cinza, branco, laranja, marrom, verde escuro e azul escuro. | `npm run typecheck`, `npm test` (16 contratos + 11 servidor + 5 jogo), `npm run build -w @terror/game` e `git diff --check` passaram. Publicados `game` e `server` separadamente com `--no-deps`, sem tocar no PostgreSQL; antes de recriar o servidor, API confirmou lobby vazio. Após publicação, os containers `game`, `server` e `postgres` ficaram saudáveis, `/api/health` respondeu pronto e `/api/match` retornou lobby vazio. Navegador confirmou as 13 opções, amarelo selecionado inicialmente, clique em azul atualizando o botão e fechando a paleta; modal fechado sem entrar. Aceite físico no tablet segue pendente. |
 | 2026-11-01 | Usuário confirmou que o checklist físico de entrada, cores, controles, pausa/retomada e dez contatos simultâneos funcionou no tablet. Etapa 4: catálogo com clareira, cabana e bosque; geração conectada por seed, encaixes recíprocos, rotação de 60°, dimensionamento pela área útil/escala, rejeição de capacidade insuficiente e desenho dos terrenos no tabuleiro. O snapshot envia apenas a seed para reconstrução determinística nos clientes. | `npm test` passou (17 contratos, 12 testes do servidor e 5 do jogo); `npm run typecheck`, `npm run build` e `git diff --check` passaram. Testes cobrem repetibilidade da seed, módulos/células sem sobreposição, rotações, ajuste pela escala e rejeição de tela pequena. A arena máxima suportada (7680×7680, escala 0,5) gerou 5615 módulos em ~288 ms no ambiente atual. Ainda não foi feito o aceite visual do mapa no tablet; validação de objetivos aguarda regras confirmadas. |
+| 2026-11-01 | Etapa 5 implementada: movimento autoritativo a 0,5 célula/s com multiplicador por destreza, colisões por transitabilidade/conectores e limites também na previsão local; raio de visão padrão 3 configurável por `PLAYER_VISION_RADIUS_CELLS`; exploração compartilhada persistente e névoa leve dinâmica. Seed e células ocultas ficam no servidor; snapshots expõem apenas células exploradas/visíveis. `/api/catalog` omite atributos/capacidades do monstro. | `npm test` passou (19 contratos, 14 testes do servidor e 5 do jogo); `npm run typecheck`, `npm run build`, `git diff --check` e integração API/Socket.IO no PostgreSQL isolado (`docker compose --profile test run --build --rm integration`) passaram. Não executados aceite visual no tablet, visão separada do monstro ou integração de sono; aceite visual do mapa modular da etapa 4 também permanece pendente. |
 
 Adicionar novas linhas com entregas reais e evidências de validação. Não listar
 como concluídos comportamentos ainda apenas planejados.

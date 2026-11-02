@@ -22,7 +22,7 @@ export function createApplication(pool: Pool, match: Match) {
     await pool.query("SELECT 1");
     response.json(healthSchema.parse({ status: "ok", database: "ready" }));
   });
-  app.get("/api/catalog", (_request, response) => response.json(match.catalog()));
+  app.get("/api/catalog", (_request, response) => response.json(match.publicCatalog()));
   app.get("/api/match", (_request, response) => response.json(match.snapshot()));
   app.get("/api/admin/overview", async (_request, response) => {
     const catalog = await loadCatalog(pool);

@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  generateTerrainMap, terrainLayout, terrainMapCells, type Catalog, type MatchCommand,
-} from "@terror/contracts";
+import { terrainLayout, type Catalog, type MatchCommand } from "@terror/contracts";
 import { readConfig } from "../config.js";
 import { Match } from "../match.js";
 
@@ -62,41 +60,38 @@ test("readiness starts exactly ten seconds, cancels globally and restarts from t
   assert.equal(match.snapshot().phase, "lobby");
   command({ type: "ready", slot: 1, value: true });
   assert.equal(match.snapshot().remainingMs, 10000);
-  assert.ok(match.snapshot().terrainSeed);
+  assert.equal(match.snapshot().exploredTerrainCells.length, 0);
   advance(3000);
   assert.equal(match.snapshot().remainingMs, 7000);
   command({ type: "ready", slot: 0, value: false });
   assert.equal(match.snapshot().phase, "lobby");
   assert.equal(match.snapshot().remainingMs, 0);
-  assert.equal(match.snapshot().terrainSeed, null);
   assert.equal(match.snapshot().players[1]?.ready, true);
   advance(20000);
   command({ type: "ready", slot: 0, value: true });
   assert.equal(match.snapshot().remainingMs, 10000);
-  const terrainSeed = match.snapshot().terrainSeed;
-  assert.ok(terrainSeed);
+  assert.equal(match.snapshot().exploredTerrainCells.length, 0);
   advance(9999);
   assert.equal(match.snapshot().phase, "countdown");
   advance(1);
   assert.equal(match.snapshot().phase, "chapter");
-  assert.equal(match.snapshot().terrainSeed, terrainSeed);
   assert.equal(match.snapshot().simulationMs, 0);
   const layout = terrainLayout(1920, 1200, 1);
-  const cells = terrainMapCells(generateTerrainMap(1920, 1200, 1, terrainSeed));
   const positions = match.snapshot().players.map((p) => p.position);
   assert.notDeepEqual(positions[0], positions[1]);
-  for (const position of positions) {
-    assert.ok(cells.some((cell) => cell.traversable
-      && layout.width * (cell.q + cell.r / 2) + 960 === position.x
-      && layout.radius * 1.5 * cell.r + 600 === position.y));
-  }
+  assert.ok(match.snapshot().exploredTerrainCells.length > 0);
+  assert.ok(match.snapshot().visibleTerrainCellKeys.length > 0);
   advance(2000);
   assert.equal(match.snapshot().phase, "running");
   command({ type: "press", slot: 0 });
+  const beforeMove = match.snapshot().players[0]!.position;
+  advance(1000);
   command({ type: "move", slot: 0, position: { x: -500, y: 90000 } });
   command({ type: "release", slot: 0 });
-  assert.equal(match.snapshot().players[0]?.position.x, layout.area.x + layout.tokenDiameter / 2);
-  assert.equal(match.snapshot().players[0]?.position.y, layout.area.y + layout.area.height - layout.tokenDiameter / 2);
+  const afterMove = match.snapshot().players[0]!.position;
+  assert.ok(Math.hypot(afterMove.x - beforeMove.x, afterMove.y - beforeMove.y) <= layout.width * 0.125 + 0.01);
+  assert.ok(afterMove.x >= layout.area.x && afterMove.x <= layout.area.x + layout.area.width);
+  assert.ok(afterMove.y >= layout.area.y && afterMove.y <= layout.area.y + layout.area.height);
 });
 
 test("a screen too small for every player rejects readiness without starting", () => {
@@ -109,7 +104,7 @@ test("a screen too small for every player rejects readiness without starting", (
   if (!result.ok) assert.match(result.error, /mapa modular não comporta/i);
   assert.equal(match.snapshot().phase, "lobby");
   assert.equal(match.snapshot().players[0]?.ready, false);
-  assert.equal(match.snapshot().terrainSeed, null);
+  assert.equal(match.snapshot().exploredTerrainCells.length, 0);
 });
 
 test("unused points do not prevent starting, but no configuration can change after countdown", () => {
@@ -295,7 +290,33 @@ test("configuration rejects missing or example secrets without exposing them", (
   assert.throws(() => readConfig({
     POSTGRES_PASSWORD: placeholder,
   }), (error: unknown) => error instanceof Error && !error.message.includes(placeholder));
+  const config = readConfig({
+    POSTGRES_PASSWORD: "b".repeat(32),
+  });
+  assert.equal(config.PORT, 3000);
+  assert.equal(config.PLAYER_VISION_RADIUS_CELLS, 3);
   assert.equal(readConfig({
     POSTGRES_PASSWORD: "b".repeat(32),
-  }).PORT, 3000);
+    PLAYER_VISION_RADIUS_CELLS: "5",
+  }).PLAYER_VISION_RADIUS_CELLS, 5);
+  assert.throws(() => readConfig({
+    POSTGRES_PASSWORD: "b".repeat(32),
+    PLAYER_VISION_RADIUS_CELLS: "0",
+  }), /Invalid server configuration/);
+});
+
+test("the public catalog excludes monster attributes and capabilities", () => {
+  const publicCatalog = new Match(catalog).publicCatalog();
+  assert.deepEqual(publicCatalog.monsters, [{ id: "test", name: "Test" }]);
+  assert.equal("attributes" in publicCatalog.monsters[0]!, false);
+  assert.equal("capabilities" in publicCatalog.monsters[0]!, false);
+});
+
+test("vision radius is validated and included in snapshots", () => {
+  const config = readConfig({
+    POSTGRES_PASSWORD: "b".repeat(32),
+    PLAYER_VISION_RADIUS_CELLS: "5",
+  });
+  assert.equal(new Match(catalog, undefined, config.PLAYER_VISION_RADIUS_CELLS).snapshot().visionRadiusCells, 5);
+  assert.throws(() => new Match(catalog, undefined, 0));
 });

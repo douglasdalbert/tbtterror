@@ -4,6 +4,7 @@ import {
   allocateAttributePoint, attributesSchema, availableAttributePoints, initialPlayerAttributes,
   PLAYER_COLORS, PLAYER_COLOR_IDS, playerColorSchema,
   generateTerrainMap, generatedTerrainMapSchema, STARTER_TERRAIN_MODULES, terrainMapCells,
+  movementMultiplier, moveWithinTerrain, visibleTerrainCellIndices,
   matchSnapshotSchema, parseApiResponse, playerAttributesSchema, settingsSchema,
   enterPreparationPlayer, leavePreparationPlayer, changePreparationAttribute, rotatePlayerName, type PreparationState,
   rotateTerrainModule, terrainModuleCatalogSchema, terrainModuleSchema, terrainModulesConnect, type TerrainModule,
@@ -230,7 +231,7 @@ test("seeded terrain generation fits whole connected modules and expands to uniq
   const maximumArena = generateTerrainMap(7680, 7680, 0.5, "maximum-arena");
   assert.ok(maximumArena.modules.length > 0);
   assert.ok(maximumArena.modules.length <= 8000);
-  assert.equal(STARTER_TERRAIN_MODULES.length, 3);
+  assert.equal(STARTER_TERRAIN_MODULES.length, 4);
   assert.equal(generatedTerrainMapSchema.safeParse({
     seed: "overlap",
     modules: [
@@ -240,6 +241,46 @@ test("seeded terrain generation fits whole connected modules and expands to uniq
   }).success, false);
 });
 
+test("movement speed scales with dexterity and collision checks enforce terrain connectors", () => {
+  assert.equal(movementMultiplier(1), 1);
+  assert.equal(movementMultiplier(2), 1.1);
+  assert.equal(movementMultiplier(3), 1.2);
+  assert.throws(() => movementMultiplier(4));
+
+  const module = terrainModule();
+  const start = { x: 960, y: 600 };
+  const target = { x: start.x + cellDimensions(1).width * 2, y: start.y };
+  const bounded = moveWithinTerrain(module.cells, start, target, 10, 1920, 1200, 1);
+  assert.ok(Math.hypot(bounded.x - start.x, bounded.y - start.y) <= 10.01);
+  const blockedCells = module.cells.map((cell) => cell.q === 1 && cell.r === 0
+    ? { ...cell, terrainType: "wall", traversable: false, connectors: Array(6).fill(null) }
+    : cell);
+  const blocked = moveWithinTerrain(blockedCells, start, target, 200, 1920, 1200, 1);
+  assert.ok(blocked.x < start.x + cellDimensions(1).width / 2);
+
+  const connectorBlockedCells = module.cells.map((cell) => ({
+    ...cell,
+    connectors: cell.q === 0 && cell.r === 0
+      ? [null, "path", "path", "path", "path", "path"]
+      : cell.q === 1 && cell.r === 0
+        ? ["path", "path", "path", null, "path", "path"]
+        : cell.connectors,
+  }));
+  const connectorBlocked = moveWithinTerrain(connectorBlockedCells, start, target, 200, 1920, 1200, 1);
+  assert.ok(connectorBlocked.x < start.x + cellDimensions(1).width / 2);
+});
+
+test("vision includes hex cells in range and unions every player's view", () => {
+  const module = terrainModule();
+  const positions = [
+    { x: 960, y: 600 },
+    { x: 960 + cellDimensions(1).width * 2, y: 600 },
+  ];
+  const visible = visibleTerrainCellIndices(positions.map((position) => ({ position })), module.cells, 1920, 1200, 1, 1);
+  assert.deepEqual(visible, [0, 1, 2, 3, 4, 5, 6]);
+  assert.equal(visibleTerrainCellIndices([{ position: positions[0]! }], module.cells, 1920, 1200, 1, 1).length, 7);
+});
+
 test("lobby snapshots cannot accidentally include hidden world data", () => {
   const snapshot = {
     id: "8312cb65-50ae-4fb6-879c-071b1861bd22",
@@ -247,7 +288,9 @@ test("lobby snapshots cannot accidentally include hidden world data", () => {
     catalogRevision: 1,
     players: [], arena: { width: 1920, height: 1200, scale: 1 },
     remainingMs: 0, resumeRemainingMs: 0, simulationMs: 0, chapter: "", error: "", controlSlots: [],
-    terrainSeed: null,
+    visionRadiusCells: 3,
+    exploredTerrainCells: [],
+    visibleTerrainCellKeys: [],
   };
   assert.equal(matchSnapshotSchema.safeParse(snapshot).success, true);
   assert.equal(matchSnapshotSchema.safeParse({ ...snapshot, phase: "paused", resumeRemainingMs: 10000 }).success, true);
@@ -255,7 +298,8 @@ test("lobby snapshots cannot accidentally include hidden world data", () => {
     assert.equal(matchSnapshotSchema.safeParse({ ...snapshot, resumeRemainingMs }).success, false);
   }
   assert.equal(matchSnapshotSchema.safeParse({ ...snapshot, monsterPosition: [1, 2] }).success, false);
-  assert.equal(matchSnapshotSchema.safeParse({ ...snapshot, terrainSeed: "" }).success, false);
+  assert.equal(matchSnapshotSchema.safeParse({ ...snapshot, visibleTerrainCellKeys: ["secret"] }).success, false);
+  assert.equal(matchSnapshotSchema.safeParse({ ...snapshot, terrainSeed: "secret" }).success, false);
   assert.equal(matchSnapshotSchema.safeParse({ ...snapshot, terrain: null }).success, false);
 });
 

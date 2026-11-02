@@ -4,7 +4,8 @@ import { playerColorSchema } from "./playerColors.js";
 export { parseApiResponse } from "./http.js";
 export { boardArea, cellDimensions, hexCorners, playerSectorDepth, terrainLayout, tokenHitCircle, initialTokenPosition } from "./layout.js";
 export {
-  generateTerrainMap, generatedTerrainMapSchema, hexDirections, rotateTerrainModule,
+  BASE_MOVEMENT_CELLS_PER_SECOND, generateTerrainMap, generatedTerrainMapSchema, hexDirections,
+  moveWithinTerrain, movementMultiplier, rotateTerrainModule, visibleTerrainCellIndices,
   STARTER_TERRAIN_MODULES, terrainMapCells, terrainModuleCellSchema, terrainModuleCatalogSchema,
   terrainModuleSchema, terrainModulesConnect, type GeneratedTerrainMap, type TerrainModule, type TerrainModuleCell,
 } from "./terrain.js";
@@ -74,6 +75,21 @@ export const catalogSchema = z.strictObject({
   settings: settingsSchema,
 });
 
+export const publicCatalogSchema = z.strictObject({
+  revision: z.number().int().positive(),
+  characters: z.array(characterSchema).min(1),
+  monsters: z.array(z.strictObject({ id: z.string().min(1), name: z.string().min(1) })).min(1),
+  settings: settingsSchema,
+});
+
+export const exploredTerrainCellSchema = z.strictObject({
+  q: z.number().int(),
+  r: z.number().int(),
+  terrainType: z.string().regex(/^[a-z][a-z0-9_-]*$/),
+});
+const terrainCellKeySchema = z.string().regex(/^-?\d+,-?\d+$/);
+export const playerVisionRadiusSchema = z.number().int().min(1).max(12);
+
 export const arenaSchema = z.strictObject({
   width: z.number().finite().min(320).max(7680),
   height: z.number().finite().min(320).max(7680),
@@ -104,7 +120,9 @@ export const matchSnapshotSchema = z.strictObject({
   chapter: z.string(),
   error: z.string(),
   controlSlots: z.array(z.number().int().min(0).max(7)).max(8),
-  terrainSeed: z.string().min(1).max(128).nullable(),
+  visionRadiusCells: playerVisionRadiusSchema,
+  exploredTerrainCells: z.array(exploredTerrainCellSchema).max(60000),
+  visibleTerrainCellKeys: z.array(terrainCellKeySchema).max(60000),
 });
 
 const slot = z.number().int().min(0).max(7);
@@ -147,6 +165,7 @@ export const adminOverviewSchema = z.strictObject({
 });
 
 export type Catalog = z.infer<typeof catalogSchema>;
+export type PublicCatalog = z.infer<typeof publicCatalogSchema>;
 export type MatchSnapshot = z.infer<typeof matchSnapshotSchema>;
 export type AdminOverview = z.infer<typeof adminOverviewSchema>;
 

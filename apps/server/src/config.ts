@@ -12,6 +12,7 @@ const configSchema = z.object({
   POSTGRES_USER: z.string().min(1).default("terror"),
   POSTGRES_PASSWORD: secretSchema,
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  PLAYER_VISION_RADIUS_CELLS: z.coerce.number().int().min(1).max(12).default(3),
 });
 
 export function readConfig(environment: NodeJS.ProcessEnv) {

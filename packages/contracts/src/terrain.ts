@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { terrainLayout } from "./layout.js";
+import { cellDimensions, terrainLayout, type Point } from "./layout.js";
 
 export const hexDirections = [
   { q: 1, r: 0 },
@@ -154,10 +154,110 @@ export type TerrainModuleCell = z.infer<typeof terrainModuleCellSchema>;
 export type TerrainModule = z.infer<typeof terrainModuleSchema>;
 export type GeneratedTerrainMap = z.infer<typeof generatedTerrainMapSchema>;
 
+export const BASE_MOVEMENT_CELLS_PER_SECOND = 0.5;
+
+export function movementMultiplier(dexterity: number): number {
+  const level = z.number().int().min(1).max(3).parse(dexterity);
+  return 1 + (level - 1) * 0.1;
+}
+
+function axialFromPoint(point: Point, width: number, height: number, scale: number) {
+  const dimensions = cellDimensions(scale);
+  const fractionalR = (point.y - height / 2) / (dimensions.radius * 1.5);
+  const fractionalQ = (point.x - width / 2) / dimensions.width - fractionalR / 2;
+  const fractionalS = -fractionalQ - fractionalR;
+  let q = Math.round(fractionalQ);
+  let r = Math.round(fractionalR);
+  let s = Math.round(fractionalS);
+  const qDifference = Math.abs(q - fractionalQ);
+  const rDifference = Math.abs(r - fractionalR);
+  const sDifference = Math.abs(s - fractionalS);
+  if (qDifference > rDifference && qDifference > sDifference) q = -r - s;
+  else if (rDifference > sDifference) r = -q - s;
+  return { q, r };
+}
+
+export function visibleTerrainCellIndices(
+  players: { position: Point }[],
+  cells: { q: number; r: number }[],
+  width: number,
+  height: number,
+  scale: number,
+  radius: number,
+): number[] {
+  z.number().int().min(1).max(12).parse(radius);
+  const byCoordinate = new Map(cells.map((cell, index) => [`${cell.q},${cell.r}`, index]));
+  const visible = new Set<number>();
+  for (const player of players) {
+    const center = axialFromPoint(player.position, width, height, scale);
+    for (let qOffset = -radius; qOffset <= radius; qOffset++) {
+      const minimumROffset = Math.max(-radius, -qOffset - radius);
+      const maximumROffset = Math.min(radius, -qOffset + radius);
+      for (let rOffset = minimumROffset; rOffset <= maximumROffset; rOffset++) {
+        const index = byCoordinate.get(`${center.q + qOffset},${center.r + rOffset}`);
+        if (index !== undefined) visible.add(index);
+      }
+    }
+  }
+  return [...visible].sort((first, second) => first - second);
+}
+
+export function moveWithinTerrain(
+  cells: (TerrainModuleCell & { q: number; r: number })[],
+  start: Point,
+  requested: Point,
+  maxDistance: number,
+  width: number,
+  height: number,
+  scale: number,
+): Point {
+  z.number().nonnegative().finite().parse(maxDistance);
+  const layout = terrainLayout(width, height, scale);
+  const dimensions = cellDimensions(scale);
+  const radius = dimensions.tokenDiameter / 2;
+  const target = {
+    x: Math.max(layout.area.x + radius, Math.min(layout.area.x + layout.area.width - radius, requested.x)),
+    y: Math.max(layout.area.y + radius, Math.min(layout.area.y + layout.area.height - radius, requested.y)),
+  };
+  const deltaX = target.x - start.x;
+  const deltaY = target.y - start.y;
+  const distance = Math.hypot(deltaX, deltaY);
+  if (distance === 0 || maxDistance === 0) return { ...start };
+  const fraction = Math.min(1, maxDistance / distance);
+  const destination = {
+    x: start.x + deltaX * fraction,
+    y: start.y + deltaY * fraction,
+  };
+  const byCoordinate = new Map(cells.map((cell) => [`${cell.q},${cell.r}`, cell]));
+  let previous = axialFromPoint(start, width, height, scale);
+  if (!byCoordinate.get(`${previous.q},${previous.r}`)?.traversable) return { ...start };
+  const sampleDistance = dimensions.width / 16;
+  const steps = Math.max(1, Math.ceil(Math.hypot(destination.x - start.x, destination.y - start.y) / sampleDistance));
+  let lastValid = { ...start };
+  for (let step = 1; step <= steps; step++) {
+    const point = {
+      x: start.x + (destination.x - start.x) * step / steps,
+      y: start.y + (destination.y - start.y) * step / steps,
+    };
+    const next = axialFromPoint(point, width, height, scale);
+    if (next.q !== previous.q || next.r !== previous.r) {
+      const direction = hexDirections.findIndex(({ q, r }) => q === next.q - previous.q && r === next.r - previous.r);
+      const fromCell = byCoordinate.get(`${previous.q},${previous.r}`);
+      const toCell = byCoordinate.get(`${next.q},${next.r}`);
+      if (direction < 0 || !fromCell?.traversable || !toCell?.traversable
+        || fromCell.connectors[direction] === null
+        || fromCell.connectors[direction] !== toCell.connectors[(direction + 3) % 6]) return lastValid;
+      previous = next;
+    } else if (!byCoordinate.get(`${next.q},${next.r}`)?.traversable) return lastValid;
+    lastValid = point;
+  }
+  return lastValid;
+}
+
 function createStarterModule(
   id: string,
   name: string,
-  cells: Partial<Pick<TerrainModuleCell, "terrainType" | "actions" | "objectSlots">>[],
+  cells: Partial<Pick<TerrainModuleCell, "terrainType" | "traversable" | "actions" | "objectSlots" | "connectors">>[],
 ): TerrainModule {
   return terrainModuleSchema.parse({
     id,
@@ -191,6 +291,15 @@ export const STARTER_TERRAIN_MODULES = terrainModuleCatalogSchema.parse([
     {},
     {},
     { terrainType: "clearing", objectSlots: ["item"] },
+  ]),
+  createStarterModule("stonewall", "Muro de pedra", [
+    { terrainType: "wall", traversable: false, connectors: Array(6).fill(null) },
+    { connectors: ["path", "path", "path", null, "path", "path"] },
+    { connectors: ["path", "path", "path", "path", null, "path"] },
+    { connectors: ["path", "path", "path", "path", "path", null] },
+    { connectors: [null, "path", "path", "path", "path", "path"] },
+    { connectors: ["path", null, "path", "path", "path", "path"] },
+    { connectors: ["path", "path", null, "path", "path", "path"] },
   ]),
 ]);
 

@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
 import {
-  catalogSchema,
-  matchSnapshotSchema,
+  BASE_MOVEMENT_CELLS_PER_SECOND, catalogSchema,
+  matchSnapshotSchema, playerVisionRadiusSchema,
   allocateAttributePoint, generateTerrainMap, initialPlayerAttributes, playerAttributesSchema,
-  matchCommandSchema, terrainLayout, terrainMapCells, initialTokenPosition,
+  matchCommandSchema, moveWithinTerrain, movementMultiplier, terrainLayout, terrainMapCells,
+  visibleTerrainCellIndices, initialTokenPosition,
   type CommandResult, type MatchPlayer,
   type Catalog,
   type GeneratedTerrainMap,
   type MatchSnapshot,
+  type PublicCatalog,
 } from "@terror/contracts";
 
 export class Match {
@@ -26,11 +28,22 @@ export class Match {
   #chapter = "";
   #error = "";
   #terrain: GeneratedTerrainMap | null = null;
+  #terrainCells: ReturnType<typeof terrainMapCells> = [];
+  #exploredTerrainCells = new Map<string, MatchSnapshot["exploredTerrainCells"][number]>();
+  #visibleTerrainCellKeys: string[] = [];
+  #visionStateKey: string | null = null;
+  #lastMoveSimulationMs = new Map<number, number>();
+  readonly #visionRadiusCells: number;
   readonly #now: () => number;
 
-  constructor(catalog: Catalog, now: () => number = () => performance.now()) {
+  constructor(
+    catalog: Catalog,
+    now: () => number = () => performance.now(),
+    visionRadiusCells = 3,
+  ) {
     this.#catalog = catalogSchema.parse(catalog);
     this.#now = now;
+    this.#visionRadiusCells = playerVisionRadiusSchema.parse(visionRadiusCells);
     this.#lastTime = now();
   }
 
@@ -38,7 +51,17 @@ export class Match {
     return structuredClone(this.#catalog);
   }
 
+  publicCatalog(): PublicCatalog {
+    return {
+      revision: this.#catalog.revision,
+      settings: structuredClone(this.#catalog.settings),
+      characters: structuredClone(this.#catalog.characters),
+      monsters: this.#catalog.monsters.map(({ id, name }) => ({ id, name })),
+    };
+  }
+
   snapshot(owner?: string): MatchSnapshot {
+    this.#refreshVision();
     return matchSnapshotSchema.parse({
       id: this.#id,
       phase: this.#phase,
@@ -51,8 +74,36 @@ export class Match {
       chapter: this.#chapter,
       error: this.#error,
       controlSlots: owner ? [...this.#owners].filter(([, o]) => o === owner).map(([slot]) => slot).sort((a, b) => a - b) : [],
-      terrainSeed: this.#terrain?.seed ?? null,
+      visionRadiusCells: this.#visionRadiusCells,
+      exploredTerrainCells: [...this.#exploredTerrainCells.values()],
+      visibleTerrainCellKeys: this.#visibleTerrainCellKeys,
     });
+  }
+
+  #refreshVision() {
+    const active = this.#terrain && ["chapter", "running", "paused"].includes(this.#phase);
+    const stateKey = `${active ? this.#terrain?.seed : ""}|${this.#phase}|${[...this.#players.values()]
+      .map(({ slot, position }) => `${slot}:${position.x}:${position.y}`).join(";")}`;
+    if (stateKey === this.#visionStateKey) return;
+    this.#visionStateKey = stateKey;
+    this.#visibleTerrainCellKeys = [];
+    if (!active) return;
+
+    const visibleIndices = visibleTerrainCellIndices(
+      [...this.#players.values()].map(({ position }) => ({ position })),
+      this.#terrainCells,
+      this.#arena.width,
+      this.#arena.height,
+      this.#arena.scale,
+      this.#visionRadiusCells,
+    );
+    for (const index of visibleIndices) {
+      const cell = this.#terrainCells[index];
+      if (!cell) continue;
+      const key = `${cell.q},${cell.r}`;
+      this.#exploredTerrainCells.set(key, { q: cell.q, r: cell.r, terrainType: cell.terrainType });
+      this.#visibleTerrainCellKeys.push(key);
+    }
   }
 
   connect(owner: string) {
@@ -152,6 +203,7 @@ export class Match {
         resumeReady: false, connected: true, pressed: false,
         position: initialTokenPosition(command.slot, layout.area, layout.tokenDiameter),
       });
+      this.#lastMoveSimulationMs.set(command.slot, this.#simulationMs);
       this.#owners.set(command.slot, owner);
       this.#cancelCountdown();
       return { ok: true };
@@ -169,33 +221,55 @@ export class Match {
     if (!player || this.#owners.get(command.slot) !== owner) return fail("Este jogador não pertence a este cliente.");
     if (command.type === "release") {
       player.pressed = false;
+      this.#lastMoveSimulationMs.delete(command.slot);
       return { ok: true };
     }
     if (command.type === "move") {
       if (!player.pressed || !["lobby", "countdown", "running"].includes(this.#phase)) return fail("Movimento indisponível.");
       const layout = terrainLayout(this.#arena.width, this.#arena.height, this.#arena.scale);
-      const radius = layout.tokenDiameter / 2;
-      player.position = {
-        x: Math.max(layout.area.x + radius, Math.min(layout.area.x + layout.area.width - radius, command.position.x)),
-        y: Math.max(layout.area.y + radius, Math.min(layout.area.y + layout.area.height - radius, command.position.y)),
-      };
+      if (this.#phase === "running" && this.#terrain) {
+        const previousTime = this.#lastMoveSimulationMs.get(command.slot) ?? this.#simulationMs;
+        const elapsedMs = Math.min(250, Math.max(0, this.#simulationMs - previousTime));
+        this.#lastMoveSimulationMs.set(command.slot, this.#simulationMs);
+        player.position = moveWithinTerrain(
+          this.#terrainCells,
+          player.position,
+          command.position,
+          BASE_MOVEMENT_CELLS_PER_SECOND
+            * movementMultiplier(player.attributes.dexterity)
+            * layout.width
+            * elapsedMs / 1000,
+          this.#arena.width,
+          this.#arena.height,
+          this.#arena.scale,
+        );
+      } else {
+        const radius = layout.tokenDiameter / 2;
+        player.position = {
+          x: Math.max(layout.area.x + radius, Math.min(layout.area.x + layout.area.width - radius, command.position.x)),
+          y: Math.max(layout.area.y + radius, Math.min(layout.area.y + layout.area.height - radius, command.position.y)),
+        };
+      }
       return { ok: true };
     }
     if (player.pressed) return fail("Não é possível executar ação enquanto em movimento.");
     if (command.type === "press") {
       if (!["lobby", "countdown", "running"].includes(this.#phase)) return fail("Movimento indisponível durante pausa ou capítulo.");
       player.pressed = true;
+      this.#lastMoveSimulationMs.set(command.slot, this.#simulationMs);
       return { ok: true };
     }
     if (command.type === "leave") {
       this.#players.delete(command.slot);
       this.#owners.delete(command.slot);
+      this.#lastMoveSimulationMs.delete(command.slot);
       if (!this.#players.size) {
         this.#phase = "lobby";
         this.#simulationMs = 0;
         this.#chapter = "";
         this.#error = "";
         this.#terrain = null;
+        this.#exploredTerrainCells.clear();
         this.#remainingMs = 0;
         this.#resumeRemainingMs = 0;
       } else if (this.#phase === "countdown") this.#cancelCountdown();
@@ -238,6 +312,7 @@ export class Match {
             return fail("O mapa modular não comporta todos os jogadores nesta escala.");
           }
           this.#terrain = terrain;
+          this.#terrainCells = terrainMapCells(terrain);
         }
       }
       player.ready = command.value;
@@ -257,6 +332,12 @@ export class Match {
     if (this.#phase === "countdown") this.#phase = "lobby";
     this.#remainingMs = 0;
     this.#terrain = null;
+    this.#terrainCells = [];
+    this.#terrainCells = [];
+    this.#exploredTerrainCells.clear();
+    this.#visibleTerrainCellKeys = [];
+    this.#visionStateKey = null;
+    this.#lastMoveSimulationMs.clear();
   }
 
   #resetPreparation() {
@@ -274,7 +355,11 @@ export class Match {
     this.#resumePhase = this.#phase === "chapter" ? "chapter" : "running";
     this.#phase = "paused";
     this.#resumeRemainingMs = 0;
-    this.#players.forEach((p) => { p.pressed = false; p.resumeReady = false; });
+    this.#players.forEach((p) => {
+      p.pressed = false;
+      p.resumeReady = false;
+      this.#lastMoveSimulationMs.delete(p.slot);
+    });
   }
 
   #tryResume() {

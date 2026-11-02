@@ -11,7 +11,7 @@ pool.on("error", (error) => {
 
 try {
   await migrate(pool);
-  const match = new Match(await loadCatalog(pool));
+  const match = new Match(await loadCatalog(pool), undefined, config.PLAYER_VISION_RADIUS_CELLS);
   const application = createApplication(pool, match);
   await new Promise<void>((resolve, reject) => {
     application.httpServer.once("error", reject);

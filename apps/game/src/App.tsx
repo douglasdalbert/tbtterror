@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { io, type Socket } from "socket.io-client";
 import {
-  catalogSchema,
+  publicCatalogSchema,
   matchSnapshotSchema,
   parseApiResponse,
   commandResultSchema,
   playerSectorDepth,
   type MatchCommand,
-  type Catalog,
+  type PublicCatalog,
   type MatchSnapshot,
   type ClientToServerEvents,
   type ServerToClientEvents,
@@ -21,7 +21,7 @@ import { getClientId } from "./clientIdentity.js";
 const isProduction = import.meta.env.APP_NODE_ENV === "production";
 
 export function App() {
-  const [catalog, setCatalog] = useState<Catalog>();
+  const [catalog, setCatalog] = useState<PublicCatalog>();
   const [snapshot, setSnapshot] = useState<MatchSnapshot>();
   const [connection, setConnection] = useState<"connected" | "connecting" | "error">("connecting");
   const [error, setError] = useState("");
@@ -73,7 +73,7 @@ export function App() {
       if (catalogMatchId.current === parsed.data.id) return;
       catalogMatchId.current = parsed.data.id;
       void fetch("/api/catalog", { signal: controller.signal })
-        .then((response) => parseApiResponse(response, catalogSchema))
+        .then((response) => parseApiResponse(response, publicCatalogSchema))
         .then((data) => {
           setCatalog(data);
           setError("");
@@ -244,8 +244,8 @@ export function App() {
             <output className="countdown" aria-label="Contagem para retomada">{Math.ceil(snapshot.resumeRemainingMs / 1000)}</output>}
           {(snapshot?.phase === "chapter" || (snapshot?.phase === "paused" && snapshot.remainingMs > 0)) &&
             <p className="chapter-title" style={{ opacity: Math.min(1, snapshot.remainingMs / 1000) }}>{snapshot.chapter}</p>}
-          {!isProduction && layout && <p className="note preview-summary">Prévia · {layout.terrains} terrenos · token {Math.round(layout.tokenDiameter)} px</p>}
-          {layout?.terrains === 0 && <p role="alert" className="error">Não cabe um terreno completo nesta escala.</p>}
+          {!isProduction && layout && <p className="note preview-summary">Prévia · {layout.cells} células exploradas · token {Math.round(layout.tokenDiameter)} px</p>}
+          {layout?.capacity === 0 && <p role="alert" className="error">Não cabe um terreno completo nesta escala.</p>}
         </section>
       </div>
       {(!fullscreen || !audioReady) && (

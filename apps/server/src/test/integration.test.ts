@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { io, type Socket } from "socket.io-client";
 import { Pool } from "pg";
 import {
-  adminOverviewSchema, catalogSchema, healthSchema, matchSnapshotSchema,
+  adminOverviewSchema, cellDimensions, publicCatalogSchema, healthSchema, matchSnapshotSchema,
   commandResultSchema, type MatchCommand, type ClientToServerEvents, type MatchSnapshot, type ServerToClientEvents,
 } from "@terror/contracts";
 import { createApplication } from "../app.js";
@@ -53,7 +53,8 @@ test("API, migrations, frozen configuration, login-free admin and socket reconne
   const health = await fetch(`${url}/api/health`);
   assert.equal(health.status, 200);
   healthSchema.parse(await health.json());
-  catalogSchema.parse(await (await fetch(`${url}/api/catalog`)).json());
+  const publicCatalog = publicCatalogSchema.parse(await (await fetch(`${url}/api/catalog`)).json());
+  assert.ok(publicCatalog.monsters.every((monster) => !("attributes" in monster) && !("capabilities" in monster)));
   const snapshot = matchSnapshotSchema.parse(await (await fetch(`${url}/api/match`)).json());
   const overview = await fetch(`${url}/api/admin/overview`);
   assert.equal(overview.status, 200);
@@ -113,10 +114,16 @@ test("API, migrations, frozen configuration, login-free admin and socket reconne
   match.tick();
   assert.equal(match.snapshot().phase, "running");
   assert.equal((await command({ type: "attribute", slot: 0, attribute: "wisdom", delta: 1 })).ok, false);
+  const beforeMove = match.snapshot().players[0]!.position;
   assert.deepEqual(await command({ type: "press", slot: 0 }), { ok: true });
   assert.equal((await command({ type: "pause", slot: 0 })).ok, false);
+  clock += 100;
+  match.tick();
   assert.deepEqual(await command({ type: "move", slot: 0, position: { x: 500, y: 500 } }), { ok: true });
   assert.deepEqual(await command({ type: "release", slot: 0 }), { ok: true });
+  const moved = match.snapshot().players[0]!.position;
+  assert.ok(Math.hypot(moved.x - beforeMove.x, moved.y - beforeMove.y)
+    <= cellDimensions(1).width * 0.5 * 1.1 * 0.1 + 0.01);
   const serverSocket = application.io.sockets.sockets.get(client.id ?? "");
   assert.ok(serverSocket);
   const disconnected = once(serverSocket, "disconnect");
@@ -127,7 +134,7 @@ test("API, migrations, frozen configuration, login-free admin and socket reconne
   client.connect();
   const restored = await reconnectActive;
   assert.deepEqual(restored.controlSlots, [0, 1]);
-  assert.deepEqual(restored.players[0]?.position, { x: 500, y: 500 });
+  assert.deepEqual(restored.players[0]?.position, moved);
   assert.deepEqual(await command({ type: "resume", slot: 0, value: true }), { ok: true });
   assert.equal(match.snapshot().phase, "paused");
   assert.deepEqual(await command({ type: "resume", slot: 1, value: true }), { ok: true });
