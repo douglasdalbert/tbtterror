@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { createPortal } from "react-dom";
+import { useRef, useState } from "react";
 import { PLAYER_COLORS, type PlayerColor } from "@terror/contracts";
 import { SectorDialog } from "./SectorDialog.js";
 import { TouchButton } from "./TouchButton.js";
@@ -9,32 +10,38 @@ export function ColorPicker({ value, unavailable = [], title = "Cor do token", o
   title?: string;
   onChange: (color: PlayerColor) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  const trigger = useRef<HTMLDivElement>(null);
   const selectedColor = PLAYER_COLORS.find(({ id }) => id === value);
   if (!selectedColor) throw new Error(`Cor de token desconhecida: ${value}`);
 
   return (
-    <>
+    <div ref={trigger} className="color-picker">
       <TouchButton className="color-picker-trigger" aria-label={`Escolher cor; atual: ${selectedColor.label}`}
-        onPress={() => setOpen(true)}>
+        onPress={() => {
+          const target = trigger.current?.closest<HTMLElement>(".sector-card");
+          if (!target) throw new Error("O seletor de cor precisa estar dentro da área de um jogador.");
+          setPortalTarget(target);
+        }}>
         <span className="color-picker-swatch" style={{ backgroundColor: selectedColor.hex }} />
       </TouchButton>
-      {open && (
-        <SectorDialog title={title} onClose={() => setOpen(false)}>
+      {portalTarget && createPortal(
+        <SectorDialog title={title} onClose={() => setPortalTarget(null)}>
           <div className="color-palette" role="group" aria-label="Cores disponíveis">
             {PLAYER_COLORS.map(({ id, label, hex }) => (
               <TouchButton key={id} className="color-option" aria-label={label}
                 aria-pressed={id === value} disabled={unavailable.includes(id)}
                 onPress={() => {
                   onChange(id);
-                  setOpen(false);
+                  setPortalTarget(null);
                 }}>
                 <span className="color-picker-swatch" style={{ backgroundColor: hex }} />
               </TouchButton>
             ))}
           </div>
-        </SectorDialog>
+        </SectorDialog>,
+        portalTarget,
       )}
-    </>
+    </div>
   );
 }

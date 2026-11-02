@@ -61,10 +61,14 @@ test("three-letter names rotate, wrap and reject invalid inputs", () => {
   assert.throws(() => rotatePlayerName("AAA", 3, 1));
 });
 
-test("token colors provide sixteen unique, runtime-validated choices", () => {
-  assert.equal(PLAYER_COLORS.length, 16);
+test("token colors provide the thirteen requested distinct, high-contrast choices", () => {
+  assert.equal(PLAYER_COLORS.length, 13);
   assert.equal(new Set(PLAYER_COLORS.map(({ id }) => id)).size, PLAYER_COLORS.length);
   assert.deepEqual(PLAYER_COLORS.map(({ id }) => id), PLAYER_COLOR_IDS);
+  assert.deepEqual(PLAYER_COLORS.map(({ label }) => label), [
+    "Vermelho", "Azul", "Verde", "Amarelo", "Roxo", "Rosa", "Preto",
+    "Cinza", "Branco", "Laranja", "Marrom", "Verde escuro", "Azul escuro",
+  ]);
   const rgb = (hex: string) => [1, 3, 5].map((index) => Number.parseInt(hex.slice(index, index + 2), 16));
   const luminance = (hex: string) => {
     const linear = rgb(hex).map((value) => {

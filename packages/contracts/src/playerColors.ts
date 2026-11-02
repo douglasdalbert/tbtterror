@@ -1,30 +1,27 @@
 import { z } from "zod";
 
 export const PLAYER_COLOR_IDS = [
-  "red", "orange", "amber", "chartreuse", "lime", "green", "spring", "teal",
-  "cyan", "azure", "blue", "indigo", "violet", "purple", "magenta", "rose",
+  "red", "blue", "green", "yellow", "purple", "pink", "black", "gray",
+  "white", "orange", "brown", "dark-green", "dark-blue",
 ] as const;
 
 export const playerColorSchema = z.enum(PLAYER_COLOR_IDS);
 export type PlayerColor = z.infer<typeof playerColorSchema>;
 
 export const PLAYER_COLORS = [
-  { id: "red", label: "Vermelho", hex: "#b80909", text: "#f8fafc" },
-  { id: "orange", label: "Laranja", hex: "#b84b09", text: "#f8fafc" },
-  { id: "amber", label: "Âmbar", hex: "#b88c09", text: "#11151d" },
-  { id: "chartreuse", label: "Amarelo-lima", hex: "#a2b809", text: "#11151d" },
-  { id: "lime", label: "Lima", hex: "#60b809", text: "#11151d" },
-  { id: "green", label: "Verde", hex: "#1fb809", text: "#11151d" },
-  { id: "spring", label: "Verde-claro", hex: "#09b835", text: "#11151d" },
-  { id: "teal", label: "Verde-esmeralda", hex: "#09b876", text: "#11151d" },
-  { id: "cyan", label: "Turquesa", hex: "#09b8b8", text: "#11151d" },
-  { id: "azure", label: "Azul-celeste", hex: "#0976b8", text: "#f8fafc" },
-  { id: "blue", label: "Azul", hex: "#0935b8", text: "#f8fafc" },
-  { id: "indigo", label: "Anil", hex: "#1f09b8", text: "#f8fafc" },
-  { id: "violet", label: "Violeta", hex: "#6009b8", text: "#f8fafc" },
-  { id: "purple", label: "Roxo", hex: "#a209b8", text: "#f8fafc" },
-  { id: "magenta", label: "Magenta", hex: "#b8098c", text: "#f8fafc" },
-  { id: "rose", label: "Rosa", hex: "#b8094b", text: "#f8fafc" },
+  { id: "red", label: "Vermelho", hex: "#dc2626", text: "#ffffff" },
+  { id: "blue", label: "Azul", hex: "#2563eb", text: "#ffffff" },
+  { id: "green", label: "Verde", hex: "#15803d", text: "#ffffff" },
+  { id: "yellow", label: "Amarelo", hex: "#facc15", text: "#11151d" },
+  { id: "purple", label: "Roxo", hex: "#7e22ce", text: "#ffffff" },
+  { id: "pink", label: "Rosa", hex: "#be185d", text: "#ffffff" },
+  { id: "black", label: "Preto", hex: "#111827", text: "#ffffff" },
+  { id: "gray", label: "Cinza", hex: "#6b7280", text: "#ffffff" },
+  { id: "white", label: "Branco", hex: "#f9fafb", text: "#11151d" },
+  { id: "orange", label: "Laranja", hex: "#c2410c", text: "#ffffff" },
+  { id: "brown", label: "Marrom", hex: "#854d0e", text: "#ffffff" },
+  { id: "dark-green", label: "Verde escuro", hex: "#14532d", text: "#ffffff" },
+  { id: "dark-blue", label: "Azul escuro", hex: "#1e3a8a", text: "#ffffff" },
 ] as const satisfies readonly {
   id: PlayerColor;
   label: string;

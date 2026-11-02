@@ -47,7 +47,9 @@ superior da coluna esquerda e X no inferior. Em token/personagem, o X apenas
 volta ao painel de jogo; estando no jogo, abre a confirmação de saída no setor.
 O nome acessível do botão acompanha a ação: voltar ou sair.
 Na entrada, as três letras ficam ao lado de um seletor de cor inicialmente
-aleatória. Há 16 cores de alto contraste; o modal reutilizável destaca a atual,
+aleatória. Há 13 cores de alto contraste (vermelho, azul, verde, amarelo, roxo,
+rosa, preto, cinza, branco, laranja, marrom, verde escuro e azul escuro); o
+modal reutilizável destaca a atual,
 fecha ao selecionar qualquer cor e desativa as escolhidas por outros jogadores.
 O servidor rejeita atomicamente nomes e cores duplicados; o token e sua
 miniatura usam o fundo escolhido, com texto contrastante.
@@ -98,9 +100,12 @@ compatível com HTTP, e preserva a reconexão via `sessionStorage`. Falhas de
 armazenamento/geração mostram alerta explícito sem desmontar a interface.
 Correção publicada somente no jogo e validada no navegador; reteste físico
 da abertura permanece pendente.
+O seletor de cores foi publicado somente no container do jogo, sem reiniciar
+servidor ou PostgreSQL. Navegador recarregado confirmou o modal de entrada com
+o botão de cor aleatória e o modal de cores, incluindo a cor atual
+destacada; a página voltou ao lobby sem confirmar entrada.
 
-**Próxima etapa:** atualizar a versão do jogo sem interromper o cliente que já
-controla a mesa; no tablet, confirmar que não fica preta e testar a seleção
+**Próxima etapa:** no tablet, confirmar que não fica preta e testar a seleção
 aleatória, o modal de cores, o destaque da cor atual e a rejeição de duplicatas;
 retestar a navegação de configurações sem menu “Jogo”, retorno pelo X antes
 da confirmação de saída, seu desaparecimento
@@ -108,9 +113,9 @@ após o início, setores de 96 px, atributos compactos/responsivos,
 miniatura fixa, tokens grandes/pequenos, bloqueio de setor,
 dez contatos e o fluxo de prontidão/contagem/cancelamento/pausa/retomada. O usuário
 autorizou avançar à etapa 3 com essa limitação registrada, sem marcar o aceite
-físico como concluído. A página compartilhada acusou que outro cliente está
-configurando a mesa; por isso, a sessão não foi alterada nem o jogo publicado.
-Depois do aceite, continuar a etapa 4 com módulos autorados, geração por seed e
+físico como concluído. A mesa de teste estava vazia após recarregar e foi
+devolvida ao lobby sem entrada de jogador. Depois do aceite, continuar a etapa
+4 com módulos autorados, geração por seed e
 integração da geometria; objetivos alcançáveis ainda dependem das regras que
 serão definidas.
 
@@ -759,7 +764,7 @@ desligado sem interromper jogo/servidor.
 - [x] Rodas de três letras, nomes únicos locais, borda de erro e modais internos.
 - [x] Indicador de alerta reutilizável no botão e SVG de walkie-talkie baseado
   na referência fornecida pelo usuário.
-- [x] Paleta de 16 cores para tokens, escolha aleatória inicial, seletor/modal
+- [x] Paleta de 13 cores distintas para tokens, escolha aleatória inicial, seletor/modal
   reutilizável, cor exclusiva validada pelo servidor e renderização no token e
   na miniatura.
 
@@ -913,6 +918,8 @@ sem duplicar controladores ou expor informações ocultas.
 
 | 2026-11-01 | Escolha de nome em duas colunas: título no topo à esquerda e fechamento abaixo; letras/entrada usam toda a altura à direita. Controles das rodas restaurados para 24 px e letras para 28 px, sem afetar outros modais. | Build/typecheck Docker e publicação somente de `game` passaram; container saudável. Navegador isolado com Socket.IO simulado confirmou os oito setores em 1920×1200 e 960×600 CSS (16 diálogos), duas colunas, 86 px de altura útil sem rolagem horizontal/vertical, alteração de letra e fechamento por Escape. Mesa real e servidor/banco preservados; reteste físico pendente. |
 | 2026-11-01 | Entrada com 16 cores de token de alto contraste, escolha aleatória inicial, seletor/modal reutilizável e exclusividade validada pelo servidor; token e miniatura recebem a cor escolhida. Base da etapa 4: schemas Zod para módulos de sete células, capacidades independentes, caminhos conectados, conectores recíprocos e seis rotações. | `npm run typecheck`, `npm test` (16 contratos + 11 servidor + 5 jogo), `npm run build` e integração API/Socket.IO no PostgreSQL isolado passaram; serviço de teste parado/removido. A página compartilhada indicou que outro cliente configura a mesa; não publiquei nem alterei essa sessão. Seletor, cores no tablet e multitoque ainda precisam de aceite físico. Módulos autorados, geração do mapa, integração e validação de objetivos continuam pendentes. |
+| 2026-11-01 | Corrigida ausência do seletor no endereço LAN: a página ainda servia o bundle anterior. Publicada a build atual somente no container `game`; ajustado o modal da paleta para renderizar diretamente na área do setor e não ser recortado pelo modal do nome. | Build do jogo passou; container `game` saudável após `docker compose up --build -d --no-deps game`; servidor e PostgreSQL permaneceram sem reinício. Navegador em `http://192.168.68.108:8080` confirmou seleção aleatória no modal de nome, abertura da paleta com 16 cores e indicação da cor atual; ambos diálogos fechados sem entrar com jogador. Aceite no tablet continua pendente. |
+| 2026-11-01 | Substituída a paleta por exatamente 13 cores nomeadas conforme pedido: vermelho, azul, verde, amarelo, roxo, rosa, preto, cinza, branco, laranja, marrom, verde escuro e azul escuro. | `npm run typecheck`, `npm test` (16 contratos + 11 servidor + 5 jogo), `npm run build -w @terror/game` e `git diff --check` passaram. Publicados `game` e `server` separadamente com `--no-deps`, sem tocar no PostgreSQL; antes de recriar o servidor, API confirmou lobby vazio. Após publicação, os containers `game`, `server` e `postgres` ficaram saudáveis, `/api/health` respondeu pronto e `/api/match` retornou lobby vazio. Navegador confirmou as 13 opções, amarelo selecionado inicialmente, clique em azul atualizando o botão e fechando a paleta; modal fechado sem entrar. Aceite físico no tablet segue pendente. |
 
 Adicionar novas linhas com entregas reais e evidências de validação. Não listar
 como concluídos comportamentos ainda apenas planejados.
