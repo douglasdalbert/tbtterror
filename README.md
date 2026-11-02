@@ -22,12 +22,16 @@ aqui prevalecem sobre alternativas antigas dessa proposta.
 - [x] Corrigir falha de inicialização em HTTP da LAN e validar no navegador.
 - [x] Ocultar menu de jogo e configurações após o início, preservando os controles da partida.
 - [x] Compactar setores, fixar miniatura interna e reorganizar atributos horizontalmente.
+- [x] Selecionar cor exclusiva para cada token durante a entrada do jogador.
 - [ ] Completar o aceite de dez contatos entre tokens e controles no tablet.
 
 **Estado:** etapas 2 e 3 implementadas sobre a geometria de prévia. O servidor
 agora mantém participantes, atributos, escala, posições, prontidão, contagem,
-capítulo e pausa em memória, com contratos validados e comandos Socket.IO.
-Objetivos, obstáculos e mapa procedural jogável permanecem para a etapa 4.
+capítulo, pausa e cores dos tokens em memória, com contratos validados e
+comandos Socket.IO. A base de contratos da etapa 4 valida módulos hexagonais
+com sete células, capacidades independentes, caminhos conectados e conectores
+recíprocos; ainda não há módulos autorados nem geração integrada à partida.
+Objetivos, obstáculos e mapa procedural jogável permanecem pendentes.
 Fullscreen e áudio são autorizados por interação; quatro dicas orientadas ficam
 fora da caixa central, uma em cada lado, sem ocupar os setores. Cada setor
 ocupado tem nome/saída à esquerda e, somente na preparação, abas de token e
@@ -42,6 +46,11 @@ de jogo com “Estou pronto”, sem botão de menu para essa aba. Nome fica no e
 superior da coluna esquerda e X no inferior. Em token/personagem, o X apenas
 volta ao painel de jogo; estando no jogo, abre a confirmação de saída no setor.
 O nome acessível do botão acompanha a ação: voltar ou sair.
+Na entrada, as três letras ficam ao lado de um seletor de cor inicialmente
+aleatória. Há 16 cores de alto contraste; o modal reutilizável destaca a atual,
+fecha ao selecionar qualquer cor e desativa as escolhidas por outros jogadores.
+O servidor rejeita atomicamente nomes e cores duplicados; o token e sua
+miniatura usam o fundo escolhido, com texto contrastante.
 Setores reservam 96 px CSS, independentemente da escala, em vez de 116–140 px.
 A miniatura interna mede sempre 64 px; somente tokens externos e terrenos escalam.
 Atributos usam
@@ -90,15 +99,20 @@ armazenamento/geração mostram alerta explícito sem desmontar a interface.
 Correção publicada somente no jogo e validada no navegador; reteste físico
 da abertura permanece pendente.
 
-**Próxima etapa:** recarregar a página no tablet e confirmar que não fica preta;
+**Próxima etapa:** atualizar a versão do jogo sem interromper o cliente que já
+controla a mesa; no tablet, confirmar que não fica preta e testar a seleção
+aleatória, o modal de cores, o destaque da cor atual e a rejeição de duplicatas;
 retestar a navegação de configurações sem menu “Jogo”, retorno pelo X antes
 da confirmação de saída, seu desaparecimento
 após o início, setores de 96 px, atributos compactos/responsivos,
 miniatura fixa, tokens grandes/pequenos, bloqueio de setor,
 dez contatos e o fluxo de prontidão/contagem/cancelamento/pausa/retomada. O usuário
 autorizou avançar à etapa 3 com essa limitação registrada, sem marcar o aceite
-físico como concluído. A próxima implementação é a etapa 4 (mapa procedural e
-objetivos), apenas quando solicitada; não confundir a prévia atual com esse mapa.
+físico como concluído. A página compartilhada acusou que outro cliente está
+configurando a mesa; por isso, a sessão não foi alterada nem o jogo publicado.
+Depois do aceite, continuar a etapa 4 com módulos autorados, geração por seed e
+integração da geometria; objetivos alcançáveis ainda dependem das regras que
+serão definidas.
 
 **Primeiro marco jogável:** entrada dos jogadores, calibração compartilhada,
 tokens com movimento simultâneo e obstáculos simples no tablet real.
@@ -745,6 +759,9 @@ desligado sem interromper jogo/servidor.
 - [x] Rodas de três letras, nomes únicos locais, borda de erro e modais internos.
 - [x] Indicador de alerta reutilizável no botão e SVG de walkie-talkie baseado
   na referência fornecida pelo usuário.
+- [x] Paleta de 16 cores para tokens, escolha aleatória inicial, seletor/modal
+  reutilizável, cor exclusiva validada pelo servidor e renderização no token e
+  na miniatura.
 
 **Aceite:** pelo menos dez contatos simultâneos no dispositivo real, incluindo
 tokens e controles, sem roubar gestos; ajustar um círculo escala todos; não há
@@ -754,7 +771,7 @@ seletor e de +/− durante o arrasto. Após substituir o seletor por abas e trat
 controles por ponteiro, Chromium/CDP validou oito tokens e dois controles
 simultâneos, troca de aba, toque sem duplicação e cancelamento. Ainda pendente:
 repetir esse cenário no tablet, incluindo os novos controles de atributos,
-nomes de três letras, duas colunas de navegação e modais internos,
+nomes de três letras, cores exclusivas, duas colunas de navegação e modais internos,
 e validar fullscreen, áudio e gestos nativos.
 
 ### 3. Início, capítulo e pausa — implementada na geometria atual; aceite físico pendente
@@ -777,6 +794,8 @@ reiniciar o servidor não restaura a partida anterior.
 
 - [ ] Componentes de terreno de sete hexágonos tipados, com ao menos um caminho,
   ações e células receptoras de objetos.
+- [x] Contratos Zod para sete células únicas, capacidades separadas, caminhos
+  internos conectados e conectores recíprocos; rotação testada em seis passos.
 - [ ] Mapa com vários componentes, seis rotações e conectores compatíveis.
 - [ ] Geração dimensionada pela área útil e pelo multiplicador do token.
 - [ ] Validação de objetivos alcançáveis e dependências de itens/atributos.
@@ -893,6 +912,7 @@ sem duplicar controladores ou expor informações ocultas.
 | 2026-11-01 | Padding esquerdo de 8 px no painel de atributos para afastar o contador +N. | Build/typecheck Docker do jogo e publicação somente de `game` passaram; container saudável. Página isolada com CSS publicado confirmou padding computado de 8 px e painel de 204 px sem overflow horizontal. Servidor/banco e mesa real não alterados; reteste físico pendente. |
 
 | 2026-11-01 | Escolha de nome em duas colunas: título no topo à esquerda e fechamento abaixo; letras/entrada usam toda a altura à direita. Controles das rodas restaurados para 24 px e letras para 28 px, sem afetar outros modais. | Build/typecheck Docker e publicação somente de `game` passaram; container saudável. Navegador isolado com Socket.IO simulado confirmou os oito setores em 1920×1200 e 960×600 CSS (16 diálogos), duas colunas, 86 px de altura útil sem rolagem horizontal/vertical, alteração de letra e fechamento por Escape. Mesa real e servidor/banco preservados; reteste físico pendente. |
+| 2026-11-01 | Entrada com 16 cores de token de alto contraste, escolha aleatória inicial, seletor/modal reutilizável e exclusividade validada pelo servidor; token e miniatura recebem a cor escolhida. Base da etapa 4: schemas Zod para módulos de sete células, capacidades independentes, caminhos conectados, conectores recíprocos e seis rotações. | `npm run typecheck`, `npm test` (16 contratos + 11 servidor + 5 jogo), `npm run build` e integração API/Socket.IO no PostgreSQL isolado passaram; serviço de teste parado/removido. A página compartilhada indicou que outro cliente configura a mesa; não publiquei nem alterei essa sessão. Seletor, cores no tablet e multitoque ainda precisam de aceite físico. Módulos autorados, geração do mapa, integração e validação de objetivos continuam pendentes. |
 
 Adicionar novas linhas com entregas reais e evidências de validação. Não listar
 como concluídos comportamentos ainda apenas planejados.

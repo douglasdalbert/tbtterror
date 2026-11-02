@@ -29,6 +29,17 @@ test("a fresh server match gets a new identity instead of restoring state", () =
   assert.notEqual(new Match(catalog).snapshot().id, new Match(catalog).snapshot().id);
 });
 
+test("player colors are unique across the match and released when a player leaves", () => {
+  const { match, command } = fixture();
+  command({ type: "join", slot: 0, name: "AAA", color: "red" });
+  const duplicate = match.command("tablet", { type: "join", slot: 1, name: "AAB", color: "red" });
+  assert.deepEqual(duplicate, { ok: false, error: "A cor escolhida já está em uso. Escolha outra cor." });
+  command({ type: "join", slot: 1, name: "AAB", color: "blue" });
+  assert.deepEqual(match.snapshot().players.map(({ color }) => color), ["red", "blue"]);
+  command({ type: "leave", slot: 0 });
+  command({ type: "join", slot: 2, name: "AAC", color: "red" });
+});
+
 function fixture() {
   let time = 0;
   const match = new Match(catalog, () => time);
@@ -43,8 +54,8 @@ function fixture() {
 
 test("readiness starts exactly ten seconds, cancels globally and restarts from ten", () => {
   const { match, command, advance } = fixture();
-  command({ type: "join", slot: 0, name: "AAA" });
-  command({ type: "join", slot: 1, name: "AAB" });
+  command({ type: "join", slot: 0, name: "AAA", color: "red" });
+  command({ type: "join", slot: 1, name: "AAB", color: "blue" });
   command({ type: "ready", slot: 0, value: true });
   assert.equal(match.snapshot().phase, "lobby");
   command({ type: "ready", slot: 1, value: true });
@@ -79,13 +90,13 @@ test("readiness starts exactly ten seconds, cancels globally and restarts from t
 
 test("unused points do not prevent starting, but no configuration can change after countdown", () => {
   const { match, command, advance } = fixture();
-  command({ type: "join", slot: 0, name: "AAA" });
+  command({ type: "join", slot: 0, name: "AAA", color: "red" });
   command({ type: "ready", slot: 0, value: true });
   advance(10000);
   for (const value of [
     { type: "attribute", slot: 0, attribute: "wisdom", delta: 1 },
     { type: "scale", slot: 0, delta: 0.05 },
-    { type: "join", slot: 1, name: "AAB" },
+    { type: "join", slot: 1, name: "AAB", color: "blue" },
     { type: "viewport", width: 1000, height: 600 },
     { type: "ready", slot: 0, value: false },
   ]) assert.equal(match.command("tablet", value).ok, false);
@@ -94,8 +105,8 @@ test("unused points do not prevent starting, but no configuration can change aft
 
 test("pause freezes positions, simulation and chapter timer until every connected player resumes", () => {
   const { match, command, advance } = fixture();
-  command({ type: "join", slot: 0, name: "AAA" });
-  command({ type: "join", slot: 1, name: "AAB" });
+  command({ type: "join", slot: 0, name: "AAA", color: "red" });
+  command({ type: "join", slot: 1, name: "AAB", color: "blue" });
   command({ type: "ready", slot: 0, value: true });
   command({ type: "ready", slot: 1, value: true });
   advance(10000);
@@ -127,7 +138,7 @@ test("pause freezes positions, simulation and chapter timer until every connecte
 
 test("disconnect pauses only participating clients, reconnection restores ownership and requires collective resume", () => {
   const { match, command, advance } = fixture();
-  command({ type: "join", slot: 0, name: "AAA" });
+  command({ type: "join", slot: 0, name: "AAA", color: "red" });
   command({ type: "ready", slot: 0, value: true });
   advance(12000);
   advance(2000);
@@ -159,8 +170,8 @@ test("disconnect pauses only participating clients, reconnection restores owners
 
 test("resume countdown cancels and restarts at ten without advancing the paused world", () => {
   const { match, command, advance } = fixture();
-  command({ type: "join", slot: 0, name: "AAA" });
-  command({ type: "join", slot: 1, name: "AAB" });
+  command({ type: "join", slot: 0, name: "AAA", color: "red" });
+  command({ type: "join", slot: 1, name: "AAB", color: "blue" });
   command({ type: "ready", slot: 0, value: true });
   command({ type: "ready", slot: 1, value: true });
   advance(10000);
@@ -198,8 +209,8 @@ test("resume countdown cancels and restarts at ten without advancing the paused 
 
 test("disconnect and confirmed exit cancel an in-progress resume countdown", () => {
   const { match, command, advance } = fixture();
-  command({ type: "join", slot: 0, name: "AAA" });
-  command({ type: "join", slot: 1, name: "AAB" });
+  command({ type: "join", slot: 0, name: "AAA", color: "red" });
+  command({ type: "join", slot: 1, name: "AAB", color: "blue" });
   command({ type: "ready", slot: 0, value: true });
   command({ type: "ready", slot: 1, value: true });
   advance(10000);
@@ -232,8 +243,8 @@ test("disconnect and confirmed exit cancel an in-progress resume countdown", () 
 
 test("pressed tokens centrally block all own actions but not another player's controls", () => {
   const { match, command } = fixture();
-  command({ type: "join", slot: 0, name: "AAA" });
-  command({ type: "join", slot: 1, name: "AAB" });
+  command({ type: "join", slot: 0, name: "AAA", color: "red" });
+  command({ type: "join", slot: 1, name: "AAB", color: "blue" });
   command({ type: "press", slot: 0 });
   for (const value of [
     { type: "leave", slot: 0 }, { type: "ready", slot: 0, value: true },
@@ -247,8 +258,8 @@ test("pressed tokens centrally block all own actions but not another player's co
   command({ type: "attribute", slot: 1, attribute: "wisdom", delta: 1 });
   command({ type: "release", slot: 0 });
   command({ type: "attribute", slot: 0, attribute: "strength", delta: 1 });
-  assert.equal(match.command("tablet", { type: "join", slot: 2, name: "AAA" }).ok, false);
-  assert.equal(match.command("tablet", { type: "join", slot: 8, name: "ZZZ" }).ok, false);
+  assert.equal(match.command("tablet", { type: "join", slot: 2, name: "AAA", color: "green" }).ok, false);
+  assert.equal(match.command("tablet", { type: "join", slot: 8, name: "ZZZ", color: "green" }).ok, false);
   command({ type: "viewport", width: 320, height: 320 });
   for (let i = 0; i < 20; i++) command({ type: "scale", slot: 0, delta: 0.05 });
   assert.equal(match.command("tablet", { type: "ready", slot: 0, value: true }).ok, false);

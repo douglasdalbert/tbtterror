@@ -1,7 +1,13 @@
 import { z } from "zod";
+import { playerColorSchema } from "./playerColors.js";
 
 export { parseApiResponse } from "./http.js";
 export { boardArea, cellDimensions, hexCorners, playerSectorDepth, terrainLayout, tokenHitCircle, initialTokenPosition } from "./layout.js";
+export {
+  hexDirections, rotateTerrainModule, terrainModuleCellSchema, terrainModuleCatalogSchema,
+  terrainModuleSchema, terrainModulesConnect, type TerrainModule, type TerrainModuleCell,
+} from "./terrain.js";
+export { PLAYER_COLOR_IDS, PLAYER_COLORS, playerColorSchema, type PlayerColor } from "./playerColors.js";
 export { enterPreparationPlayer, leavePreparationPlayer, changePreparationAttribute, rotatePlayerName, playerNameSchema, type PreparationState } from "./preparation.js";
 
 const attributeSchema = z.number().int().min(1).max(3);
@@ -76,6 +82,7 @@ export const pointSchema = z.strictObject({ x: z.number().finite(), y: z.number(
 export const matchPlayerSchema = z.strictObject({
   slot: z.number().int().min(0).max(7),
   name: z.string().regex(/^[A-Z]{3}$/),
+  color: playerColorSchema,
   attributes: playerAttributesSchema,
   ready: z.boolean(),
   resumeReady: z.boolean(),
@@ -100,7 +107,7 @@ export const matchSnapshotSchema = z.strictObject({
 
 const slot = z.number().int().min(0).max(7);
 export const matchCommandSchema = z.discriminatedUnion("type", [
-  z.strictObject({ type: z.literal("join"), slot, name: z.string().regex(/^[A-Z]{3}$/) }),
+  z.strictObject({ type: z.literal("join"), slot, name: z.string().regex(/^[A-Z]{3}$/), color: playerColorSchema }),
   z.strictObject({ type: z.literal("leave"), slot }),
   z.strictObject({ type: z.literal("attribute"), slot, attribute: z.enum(["strength", "dexterity", "wisdom"]), delta: z.union([z.literal(-1), z.literal(1)]) }),
   z.strictObject({ type: z.literal("scale"), slot, delta: z.union([z.literal(-0.05), z.literal(0.05)]) }),

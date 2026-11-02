@@ -133,9 +133,11 @@ export class Match {
       if (this.#phase !== "lobby" && this.#phase !== "countdown") return fail("A partida já começou.");
       if (this.#players.has(command.slot)) return fail("Este setor já está ocupado.");
       if ([...this.#players.values()].some((p) => p.name === command.name)) return fail(`O nome ${command.name} já está em uso.`);
+      if ([...this.#players.values()].some((p) => p.color === command.color)) return fail("A cor escolhida já está em uso. Escolha outra cor.");
       const layout = terrainLayout(this.#arena.width, this.#arena.height, this.#arena.scale);
       this.#players.set(command.slot, {
-        slot: command.slot, name: command.name, attributes: initialPlayerAttributes(), ready: false,
+        slot: command.slot, name: command.name, color: command.color,
+        attributes: initialPlayerAttributes(), ready: false,
         resumeReady: false, connected: true, pressed: false,
         position: initialTokenPosition(command.slot, layout.area, layout.tokenDiameter),
       });

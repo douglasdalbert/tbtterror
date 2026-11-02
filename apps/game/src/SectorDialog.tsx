@@ -20,9 +20,11 @@ export function SectorDialog({ title, onClose, children }: {
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();
+          event.stopPropagation();
           onClose();
         }
         if (event.key !== "Tab") return;
+        event.stopPropagation();
         const targets = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
           'button:not(:disabled), [tabindex="0"]',
         ));

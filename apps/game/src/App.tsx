@@ -200,6 +200,8 @@ export function App() {
             slot={slot}
             attributes={player?.attributes}
             name={player?.name}
+            color={player?.color}
+            reservedColors={snapshot?.players.filter((entry) => entry.slot !== slot).map((entry) => entry.color) ?? []}
             error={sectorErrors[slot] || ""}
             canEnter={catalog !== undefined && connection === "connected" && configuring}
             phase={snapshot?.phase ?? "lobby"}
@@ -209,7 +211,7 @@ export function App() {
             controllable={!player || (snapshot?.controlSlots.includes(slot) ?? false)}
             busy={!!busySlots[slot] || connection !== "connected"}
             scale={scale}
-            onEnter={(name) => sendCommand({ type: "join", slot, name })}
+            onEnter={(name, color) => sendCommand({ type: "join", slot, name, color })}
             onLeave={() => sendCommand({ type: "leave", slot })}
             onClearError={() => setSectorErrors((current) => ({ ...current, [slot]: "" }))}
             onAttribute={(attribute, delta) => sendCommand({ type: "attribute", slot, attribute, delta })}

@@ -93,9 +93,11 @@ test("API, migrations, frozen configuration, login-free admin and socket reconne
   const command = async (value: MatchCommand) => commandResultSchema.parse(
     await client.timeout(3000).emitWithAck("match:command", value),
   );
-  assert.deepEqual(await command({ type: "join", slot: 0, name: "AAA" }), { ok: true });
-  assert.equal((await command({ type: "join", slot: 1, name: "AAA" })).ok, false);
-  assert.deepEqual(await command({ type: "join", slot: 1, name: "AAB" }), { ok: true });
+  assert.deepEqual(await command({ type: "join", slot: 0, name: "AAA", color: "red" }), { ok: true });
+  assert.equal((await command({ type: "join", slot: 1, name: "AAA", color: "blue" })).ok, false);
+  assert.equal((await command({ type: "join", slot: 1, name: "AAB", color: "red" })).ok, false);
+  assert.deepEqual(await command({ type: "join", slot: 1, name: "AAB", color: "blue" }), { ok: true });
+  assert.deepEqual(match.snapshot().players.map(({ color }) => color), ["red", "blue"]);
   assert.deepEqual(await command({ type: "ready", slot: 0, value: true }), { ok: true });
   assert.deepEqual(await command({ type: "ready", slot: 1, value: true }), { ok: true });
   clock += 3000;

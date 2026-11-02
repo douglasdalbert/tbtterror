@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { allocateAttributePoint, initialPlayerAttributes, playerAttributesSchema, type Attributes, type AttributeName } from "./index.js";
+import { playerColorSchema, type PlayerColor } from "./playerColors.js";
 
 export const playerNameSchema = z.string().regex(/^[A-Z]{3}$/, "Escolha três letras de A a Z.");
 const slotSchema = z.number().int().min(0).max(7);
 
 export interface PreparationState {
-  players: Record<number, { name: string; attributes: Attributes }>;
+  players: Record<number, { name: string; color: PlayerColor; attributes: Attributes }>;
   errors: Record<number, string>;
 }
 
@@ -18,16 +19,22 @@ export function rotatePlayerName(name: string, index: number, delta: number): st
     : letter).join("");
 }
 
-export function enterPreparationPlayer(state: PreparationState, slot: number, name: string): PreparationState {
+export function enterPreparationPlayer(
+  state: PreparationState, slot: number, name: string, color: PlayerColor,
+): PreparationState {
   slotSchema.parse(slot);
   const parsed = playerNameSchema.safeParse(name);
+  const parsedColor = playerColorSchema.safeParse(color);
   const error = !parsed.success ? "Escolha três letras de A a Z."
+    : !parsedColor.success ? "Escolha uma cor disponível."
     : state.players[slot] ? "Este setor já está ocupado."
     : Object.values(state.players).some((player) => player.name === name)
-      ? `O nome ${name} já está em uso. Escolha outras letras.` : "";
+      ? `O nome ${name} já está em uso. Escolha outras letras.`
+      : Object.values(state.players).some((player) => player.color === color)
+        ? "A cor escolhida já está em uso. Escolha outra cor." : "";
   if (error) return { ...state, errors: { ...state.errors, [slot]: error } };
   return {
-    players: { ...state.players, [slot]: { name, attributes: initialPlayerAttributes() } },
+    players: { ...state.players, [slot]: { name, color, attributes: initialPlayerAttributes() } },
     errors: { ...state.errors, [slot]: "" },
   };
 }

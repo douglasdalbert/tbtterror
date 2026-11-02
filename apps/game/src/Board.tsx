@@ -1,6 +1,9 @@
 import { useEffect, useRef } from "react";
 import Phaser from "phaser";
-import { boardArea, hexCorners, terrainLayout, tokenHitCircle, initialTokenPosition, type Catalog, type MatchSnapshot, type MatchCommand } from "@terror/contracts";
+import {
+  boardArea, hexCorners, terrainLayout, tokenHitCircle, initialTokenPosition, PLAYER_COLORS,
+  type Catalog, type MatchSnapshot, type MatchCommand, type PlayerColor,
+} from "@terror/contracts";
 import { tokenMarkerPositions, tokenMarkerShapes } from "./TokenVisual.js";
 
 export interface LayoutSummary {
@@ -13,6 +16,7 @@ export interface LayoutSummary {
 export interface PreviewPlayer {
   slot: number;
   name: string;
+  color: PlayerColor;
   attributes: Catalog["characters"][number]["attributes"];
 }
 
@@ -194,6 +198,7 @@ class TerrainPreviewScene extends Phaser.Scene {
 
     for (const player of this.#players) {
       const { slot, name } = player;
+      const color = PLAYER_COLORS.find(({ id }) => id === player.color);
       const diameter = layout.tokenDiameter;
       const position = this.#positions.get(slot);
       if (!position) {
@@ -204,12 +209,13 @@ class TerrainPreviewScene extends Phaser.Scene {
       const center = this.#positions.get(slot);
       if (!center) continue;
 
-      tokenGraphics.fillStyle(0x1678cf, 0.95);
-      tokenGraphics.fillCircle(center.x, center.y, diameter * 0.24);
-      tokenGraphics.lineStyle(Math.max(1, diameter * 0.025), 0x84a8c1, 0.9);
+      if (!color) throw new Error(`Cor de token desconhecida: ${player.color}`);
+      tokenGraphics.fillStyle(Number.parseInt(color.hex.slice(1), 16), 0.95);
+      tokenGraphics.fillCircle(center.x, center.y, diameter * 0.49);
+      tokenGraphics.lineStyle(Math.max(1, diameter * 0.025), Number.parseInt(color.text.slice(1), 16), 0.9);
       tokenGraphics.strokeCircle(center.x, center.y, diameter * 0.49);
       this.updateMarkers(slot, center, diameter);
-      this.updateLabels(slot, name, center, diameter);
+      this.updateLabels(slot, name, center, diameter, color.text);
       this.updateZone(slot, center, diameter);
     }
 
@@ -298,13 +304,13 @@ class TerrainPreviewScene extends Phaser.Scene {
     });
   }
 
-  private updateLabels(slot: number, name: string, center: Position, diameter: number) {
+  private updateLabels(slot: number, name: string, center: Position, diameter: number, textColor: string) {
     let label = this.#labels.get(slot);
     if (!label) {
       label = this.add.text(0, 0, name, {
           fontFamily: "system-ui, sans-serif",
           fontSize: "8px",
-          color: "#e6edf3",
+          color: textColor,
           fontStyle: "bold",
         }).setOrigin(0.5);
       this.#labels.set(slot, label);
@@ -312,6 +318,7 @@ class TerrainPreviewScene extends Phaser.Scene {
     label.setText(name);
     label.setPosition(center.x, center.y);
     label.setFontSize(Math.max(6, diameter * 0.125));
+    label.setColor(textColor);
   }
 
   private updateZone(slot: number, center: Position, diameter: number) {

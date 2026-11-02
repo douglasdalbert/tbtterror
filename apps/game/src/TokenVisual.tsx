@@ -1,4 +1,4 @@
-import type { AttributeName, Attributes } from "@terror/contracts";
+import { PLAYER_COLORS, type AttributeName, type Attributes, type PlayerColor } from "@terror/contracts";
 
 export const tokenMarkerShapes: Record<AttributeName, { body: string; details: string; activeExtras: string }> = {
   strength: {
@@ -39,22 +39,24 @@ export function TokenMarker({ attribute, used = false }: { attribute: AttributeN
   );
 }
 
-export function CalibrationToken({ name, attributes }: {
+export function CalibrationToken({ name, attributes, color }: {
   name: string;
   attributes: Attributes;
+  color: PlayerColor;
 }) {
+  const tokenColor = PLAYER_COLORS.find(({ id }) => id === color);
+  if (!tokenColor) throw new Error(`Cor de token desconhecida: ${color}`);
   return (
     <svg className="calibration-token" width="64" height="64"
       viewBox="0 0 64 64" role="img"
       aria-label={`Miniatura do token ${name} de 64 pixels CSS; força ${attributes.strength}, destreza ${attributes.dexterity}, inteligência ${attributes.wisdom}; nenhum atributo em uso`}>
-      <circle cx="32" cy="32" r="31" fill="#192d3d" stroke="#91a9bc" strokeWidth="1.5" />
-      <circle cx="32" cy="32" r="15" fill="#1678cf" />
+      <circle cx="32" cy="32" r="31" fill={tokenColor.hex} stroke={tokenColor.text} strokeWidth="1.5" />
       {tokenMarkerPositions().map(({ attribute, index, x, y }) => (
         <g key={`${attribute}-${index}`} transform={`translate(${x - 4.25} ${y - 4.25}) scale(.085)`}>
           <TokenMarker attribute={attribute} />
         </g>
       ))}
-      <text x="32" y="32" fill="#e6edf3" fontFamily="system-ui, sans-serif"
+      <text x="32" y="32" fill={tokenColor.text} fontFamily="system-ui, sans-serif"
         fontSize="8" fontWeight="700" textAnchor="middle" dominantBaseline="central">{name}</text>
     </svg>
   );

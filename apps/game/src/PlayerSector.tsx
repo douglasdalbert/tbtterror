@@ -1,10 +1,14 @@
 import { useEffect, useId, useState } from "react";
-import { availableAttributePoints, rotatePlayerName, type Attributes, type AttributeName, type MatchSnapshot } from "@terror/contracts";
+import {
+  availableAttributePoints, PLAYER_COLORS, rotatePlayerName,
+  type Attributes, type AttributeName, type MatchSnapshot, type PlayerColor,
+} from "@terror/contracts";
 import { TouchButton } from "./TouchButton.js";
 import { AttributeIcon, TabIcon } from "./Icons.js";
 import { LetterWheel } from "./LetterWheel.js";
 import { SectorDialog } from "./SectorDialog.js";
 import { CalibrationToken } from "./TokenVisual.js";
+import { ColorPicker } from "./ColorPicker.js";
 
 const attributeLabels: { attribute: AttributeName; label: string }[] = [
   { attribute: "strength", label: "Força" },
@@ -19,9 +23,11 @@ const tabs = [
 type Tab = "game" | typeof tabs[number]["tab"];
 type Dialog = "join" | "leave" | AttributeName | null;
 
-export function PlayerSector({ slot, name, attributes, error, canEnter, scale, phase, ready, resumeReady, moving, controllable, busy, onEnter, onLeave, onClearError, onAttribute, onScale, onReady, onPause, onResume }: {
+export function PlayerSector({ slot, name, color, reservedColors, attributes, error, canEnter, scale, phase, ready, resumeReady, moving, controllable, busy, onEnter, onLeave, onClearError, onAttribute, onScale, onReady, onPause, onResume }: {
   slot: number;
   name: string | undefined;
+  color: PlayerColor | undefined;
+  reservedColors: readonly PlayerColor[];
   attributes: Attributes | undefined;
   error: string;
   canEnter: boolean;
@@ -32,7 +38,7 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, p
   moving: boolean;
   controllable: boolean;
   busy: boolean;
-  onEnter: (name: string) => void;
+  onEnter: (name: string, color: PlayerColor) => void;
   onLeave: () => void;
   onClearError: () => void;
   onAttribute: (attribute: AttributeName, delta: 1 | -1) => void;
@@ -44,6 +50,7 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, p
   const [activeTab, setActiveTab] = useState<Tab>("game");
   const [dialog, setDialog] = useState<Dialog>(null);
   const [draftName, setDraftName] = useState("AAA");
+  const [draftColor, setDraftColor] = useState<PlayerColor>(PLAYER_COLORS[0]!.id);
   const panelId = useId();
   const locked = phase !== "lobby" && phase !== "countdown";
   const shownTab = moving || locked ? "game" : activeTab;
@@ -69,6 +76,7 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, p
     error ? "sector--error" : "",
   ].filter(Boolean).join(" ");
   const availablePoints = attributes ? availableAttributePoints(attributes) : 3;
+  const availableColors = PLAYER_COLORS.filter(({ id }) => !reservedColors.includes(id));
   const identity = name ?? `Setor ${slot + 1}`;
   const rotation = slot === 3 ? 270 : slot === 7 ? 90 : slot < 3 ? 180 : 0;
   const visibleDialog = moving || (dialog === "join" && attributes) ? null : dialog;
@@ -126,7 +134,7 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, p
                   <div className="calibration-controls">
                     <TouchButton aria-label={`Diminuir escala compartilhada de ${identity}`}
                       disabled={busy || scale <= 0.5} onPress={() => onScale(-0.05)}>−</TouchButton>
-                    <CalibrationToken name={identity} attributes={attributes} />
+                    <CalibrationToken name={identity} attributes={attributes} color={color ?? PLAYER_COLORS[0]!.id} />
                     <TouchButton aria-label={`Aumentar escala compartilhada de ${identity}`}
                       disabled={busy || scale >= 2} onPress={() => onScale(0.05)}>+</TouchButton>
                   </div>
@@ -186,6 +194,9 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, p
             <div className="join-area">
               <TouchButton className="join-button" disabled={!canEnter} onPress={() => {
                 setDraftName("AAA");
+                const colors = PLAYER_COLORS.filter(({ id }) => !reservedColors.includes(id));
+                if (!colors.length) return;
+                setDraftColor(colors[Math.floor(Math.random() * colors.length)]!.id);
                 setActiveTab("game");
                 onClearError();
                 setDialog("join");
@@ -205,7 +216,13 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, p
                     }} />
                 ))}
               </div>
-              <TouchButton className="confirm-join" disabled={busy || !canEnter} onPress={() => onEnter(draftName)}>
+              <ColorPicker value={draftColor} unavailable={reservedColors}
+                onChange={(color) => {
+                  setDraftColor(color);
+                  onClearError();
+                }} />
+              <TouchButton className="confirm-join" disabled={busy || !canEnter || availableColors.length === 0}
+                onPress={() => onEnter(draftName, draftColor)}>
                 Entrar
               </TouchButton>
             </div>

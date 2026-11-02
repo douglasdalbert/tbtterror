@@ -2,10 +2,29 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   allocateAttributePoint, attributesSchema, availableAttributePoints, initialPlayerAttributes,
+  PLAYER_COLORS, PLAYER_COLOR_IDS, playerColorSchema,
   matchSnapshotSchema, parseApiResponse, playerAttributesSchema, settingsSchema,
   enterPreparationPlayer, leavePreparationPlayer, changePreparationAttribute, rotatePlayerName, type PreparationState,
+  rotateTerrainModule, terrainModuleCatalogSchema, terrainModuleSchema, terrainModulesConnect, type TerrainModule,
 } from "./index.js";
 import { boardArea, cellDimensions, hexCorners, terrainLayout, tokenHitCircle } from "./layout.js";
+import { hexDirections } from "./terrain.js";
+
+function terrainModule(): TerrainModule {
+  return {
+    id: "starter",
+    name: "Clareira",
+    cells: [{ q: 0, r: 0 }, ...hexDirections].map(({ q, r }) => ({
+      q,
+      r,
+      terrainType: "path",
+      traversable: true,
+      actions: q === 0 && r === 0 ? ["inspect"] : [],
+      objectSlots: q === 1 && r === 0 ? ["item"] : [],
+      connectors: Array(6).fill("path"),
+    })),
+  };
+}
 
 test("attributes reject out-of-range values and unknown properties", () => {
   assert.equal(attributesSchema.safeParse({ strength: 0, dexterity: 2, wisdom: 2 }).success, false);
@@ -42,14 +61,47 @@ test("three-letter names rotate, wrap and reject invalid inputs", () => {
   assert.throws(() => rotatePlayerName("AAA", 3, 1));
 });
 
-test("joining is atomic, rejects duplicate names and frees names on confirmed exit", () => {
+test("token colors provide sixteen unique, runtime-validated choices", () => {
+  assert.equal(PLAYER_COLORS.length, 16);
+  assert.equal(new Set(PLAYER_COLORS.map(({ id }) => id)).size, PLAYER_COLORS.length);
+  assert.deepEqual(PLAYER_COLORS.map(({ id }) => id), PLAYER_COLOR_IDS);
+  const rgb = (hex: string) => [1, 3, 5].map((index) => Number.parseInt(hex.slice(index, index + 2), 16));
+  const luminance = (hex: string) => {
+    const linear = rgb(hex).map((value) => {
+      const channel = value / 255;
+      return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    return linear[0]! * 0.2126 + linear[1]! * 0.7152 + linear[2]! * 0.0722;
+  };
+  for (const { id, hex, text } of PLAYER_COLORS) {
+    assert.equal(playerColorSchema.safeParse(id).success, true);
+    assert.match(hex, /^#[0-9a-f]{6}$/);
+    const contrast = (Math.max(luminance(hex), luminance(text)) + 0.05)
+      / (Math.min(luminance(hex), luminance(text)) + 0.05);
+    assert.ok(contrast >= 4.5, `${id} needs readable token text; contrast is ${contrast}.`);
+  }
+  for (let first = 0; first < PLAYER_COLORS.length; first++) {
+    for (let second = first + 1; second < PLAYER_COLORS.length; second++) {
+      const a = rgb(PLAYER_COLORS[first]!.hex);
+      const b = rgb(PLAYER_COLORS[second]!.hex);
+      const distance = Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
+      assert.ok(distance >= 45, `${PLAYER_COLORS[first]!.id} and ${PLAYER_COLORS[second]!.id} are too similar.`);
+    }
+  }
+  assert.equal(playerColorSchema.safeParse("not-a-color").success, false);
+});
+
+test("joining is atomic, rejects duplicate names or colors and frees both on confirmed exit", () => {
   const empty: PreparationState = { players: {}, errors: {} };
-  const joined = enterPreparationPlayer(empty, 0, "AAA");
-  const duplicate = enterPreparationPlayer(joined, 1, "AAA");
+  const joined = enterPreparationPlayer(empty, 0, "AAA", "red");
+  const duplicate = enterPreparationPlayer(joined, 1, "AAA", "blue");
   assert.equal(duplicate.players[1], undefined);
   assert.match(duplicate.errors[1] ?? "", /já está em uso/);
-  assert.equal(enterPreparationPlayer(joined, 0, "BBB").players[0]?.name, "AAA");
-  const retried = enterPreparationPlayer(duplicate, 1, "AAB");
+  const duplicateColor = enterPreparationPlayer(joined, 1, "AAB", "red");
+  assert.equal(duplicateColor.players[1], undefined);
+  assert.match(duplicateColor.errors[1] ?? "", /cor escolhida já está em uso/);
+  assert.equal(enterPreparationPlayer(joined, 0, "BBB", "blue").players[0]?.name, "AAA");
+  const retried = enterPreparationPlayer(duplicate, 1, "AAB", "blue");
   assert.equal(retried.errors[1], "");
   assert.equal(retried.players[1]?.name, "AAB");
   const changed = changePreparationAttribute(retried, 1, "wisdom", 1);
@@ -59,9 +111,9 @@ test("joining is atomic, rejects duplicate names and frees names on confirmed ex
   assert.match(invalid.errors[1] ?? "", /Respeite/);
   assert.equal(invalid.players, changed.players);
   const left = leavePreparationPlayer(changed, 0);
-  assert.equal(enterPreparationPlayer(left, 2, "AAA").players[2]?.name, "AAA");
-  assert.match(enterPreparationPlayer(empty, 0, "AA1").errors[0] ?? "", /três letras/);
-  assert.throws(() => enterPreparationPlayer(empty, 8, "AAA"));
+  assert.equal(enterPreparationPlayer(left, 2, "AAA", "red").players[2]?.name, "AAA");
+  assert.match(enterPreparationPlayer(empty, 0, "AA1", "red").errors[0] ?? "", /três letras/);
+  assert.throws(() => enterPreparationPlayer(empty, 8, "AAA", "red"));
   assert.deepEqual(empty, { players: {}, errors: {} });
 });
 
@@ -75,6 +127,69 @@ test("settings enforce the agreed geometry and touch requirements", () => {
   };
   assert.equal(settingsSchema.safeParse(settings).success, true);
   assert.equal(settingsSchema.safeParse({ ...settings, rotationStepDegrees: 90 }).success, false);
+});
+
+test("terrain modules validate seven unique cells, separate capabilities and connected paths", () => {
+  const module = terrainModule();
+  assert.equal(terrainModuleSchema.safeParse(module).success, true);
+  assert.equal(terrainModuleCatalogSchema.safeParse([module]).success, true);
+  assert.equal(terrainModuleCatalogSchema.safeParse([module, module]).success, false);
+  assert.equal(terrainModuleCatalogSchema.safeParse([{
+    ...module,
+    cells: module.cells.map((cell) => ({ ...cell, actions: [], objectSlots: [] })),
+  }]).success, false);
+  assert.equal(terrainModuleSchema.safeParse({
+    ...module,
+    cells: module.cells.slice(1),
+  }).success, false);
+  assert.equal(terrainModuleSchema.safeParse({
+    ...module,
+    cells: module.cells.map((cell) => ({ ...cell, terrainType: "ground" })),
+  }).success, false);
+  assert.equal(terrainModuleSchema.safeParse({
+    ...module,
+    cells: module.cells.map((cell) => cell.q === 1 && cell.r === 0
+      ? { ...cell, connectors: [...cell.connectors.slice(0, 3), null, ...cell.connectors.slice(4)] }
+      : cell),
+  }).success, false);
+  assert.equal(terrainModuleSchema.safeParse({
+    ...module,
+    cells: module.cells.map((cell) => cell.q === 0 && cell.r === 0
+      ? { ...cell, traversable: false }
+      : cell),
+  }).success, false);
+});
+
+test("terrain module rotations preserve cell capabilities and rotate connectors in sixty-degree steps", () => {
+  const module = terrainModule();
+  const rotated = Array.from({ length: 6 }, (_, steps) => rotateTerrainModule(module, steps));
+  assert.deepEqual(rotated[0], module);
+  for (const [steps, result] of rotated.entries()) {
+    assert.equal(result.cells.length, 7);
+    assert.equal(result.cells.find((cell) => cell.actions.length > 0)?.terrainType, "path");
+    const center = result.cells.find((cell) => cell.q === 0 && cell.r === 0);
+    assert.deepEqual(center?.connectors, Array(6).fill("path"));
+    if (steps > 0) {
+      const objectCell = result.cells.find((cell) => cell.objectSlots.length > 0);
+      assert.notDeepEqual({ q: objectCell?.q, r: objectCell?.r }, { q: 1, r: 0 });
+    }
+  }
+  assert.deepEqual(rotateTerrainModule(rotated[1]!, 5), module);
+  assert.throws(() => rotateTerrainModule(module, 6));
+});
+
+test("terrain modules only connect through matching reciprocal boundary connectors", () => {
+  const module = terrainModule();
+  assert.equal(terrainModulesConnect(module, module, { q: 2, r: 1 }), true);
+  const incompatible = {
+    ...module,
+    cells: module.cells.map((cell) => ({
+      ...cell,
+      connectors: Array(6).fill("wall"),
+    })),
+  };
+  assert.equal(terrainModulesConnect(module, incompatible, { q: 2, r: 1 }), false);
+  assert.equal(terrainModulesConnect(module, module, { q: 0, r: 0 }), false);
 });
 
 test("lobby snapshots cannot accidentally include hidden world data", () => {
