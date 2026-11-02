@@ -59,8 +59,8 @@ body {
 .sector-layout { display: grid; grid-template-columns: 32px minmax(0, 1fr) 32px; align-items: center; gap: 4px; height: 100%; }
 .sector-layout:has(.join-area) { grid-template-columns: 1fr; }
 .sector-layout:not(:has(.join-area, .sector-tabs)) { grid-template-columns: 32px minmax(0, 1fr); }
-.sector-identity { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; height: 100%; }
-.player-name { font-size: 11px; letter-spacing: 0.5px; padding-top: 5px; }
+.sector-identity { display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 6px; height: 100%; }
+.player-name { font-size: 11px; letter-spacing: 0.5px; }
 .touch-button { position: relative; }
 .button-alert { position: absolute; top: -3px; right: -3px; width: 9px; height: 9px; border-radius: 50%; background: #ff4545; border: 1px solid #151d29; pointer-events: none; }
 .sector-card button, .immersive-button {
@@ -83,14 +83,15 @@ body {
 .sector-tabs button[aria-selected="true"] { border-color: #75d9f4; background: #214860; }
 .tab-icon { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .available-points { align-self: center; text-align: center; font-size: 26px; font-weight: 800; color: #4ade80; }
-.attribute-columns { display: grid; grid-template-columns: 32px repeat(3, minmax(0, 1fr)); gap: 3px; width: 100%; }
-.attribute-control { display: grid; justify-items: center; gap: 2px; text-align: center; }
-.attribute-adjustments { display: flex; gap: 2px; }
-.attribute-control button { width: 26px; min-height: 28px; padding: 0; font-size: 18px; }
-.attribute-control .attribute-info { width: 32px; height: 32px; }
-.attribute-icon { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.attribute-columns { display: grid; grid-template-columns: 24px repeat(3, minmax(0, 1fr)); align-items: center; justify-items: center; gap: 3px; width: 100%; container-type: inline-size; }
+.attribute-control { display: grid; grid-template-columns: minmax(0, 1fr) 14px repeat(2, minmax(0, 1fr)); align-items: center; justify-items: center; gap: 2px; text-align: center; width: 100%; max-width: 108px; min-width: 0; }
+.attribute-control button { width: 100%; min-width: 0; height: 32px; min-height: 32px; padding: 0; font-size: 18px; }
+.attribute-icon { width: min(26px, 100%); height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .attribute-control output { font-size: 22px; line-height: 24px; font-weight: 800; }
 .attribute-value--allocated { color: #4ade80; }
+@container (max-width: 320px) {
+  .attribute-control { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .calibration-controls { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; }
 .calibration-controls button { width: 34px; min-width: 34px; height: 34px; padding: 0; font-size: 22px; }
 .calibration-token { flex: 0 0 auto; overflow: visible; }
@@ -103,8 +104,8 @@ body {
 .name-selection { display: flex; justify-content: center; align-items: center; gap: 12px; height: 100%; }
 .name-wheels { display: flex; gap: 4px; }
 .letter-wheel { display: grid; width: 32px; justify-items: stretch; }
-.letter-wheel button { height: 24px; min-height: 24px; padding: 0; line-height: 1; }
-.letter-wheel-value { display: grid; place-items: center; height: 28px; font-size: 24px; font-weight: 800; touch-action: none; border-radius: 4px; background: #0c131d; }
+.letter-wheel button { height: 18px; min-height: 18px; padding: 0; line-height: 1; }
+.letter-wheel-value { display: grid; place-items: center; height: 20px; font-size: 20px; font-weight: 800; touch-action: none; border-radius: 4px; background: #0c131d; }
 .exit-confirmation { display: flex; align-items: center; justify-content: center; gap: 12px; height: 100%; }
 .sector-error { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .game-controls { display: grid; place-items: center; width: 100%; }

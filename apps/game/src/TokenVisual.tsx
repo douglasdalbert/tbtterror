@@ -39,15 +39,14 @@ export function TokenMarker({ attribute, used = false }: { attribute: AttributeN
   );
 }
 
-export function CalibrationToken({ scale, name, attributes }: {
-  scale: number;
+export function CalibrationToken({ name, attributes }: {
   name: string;
   attributes: Attributes;
 }) {
   return (
-    <svg className="calibration-token" style={{ width: `${64 * scale}px`, height: `${64 * scale}px` }}
+    <svg className="calibration-token" width="64" height="64"
       viewBox="0 0 64 64" role="img"
-      aria-label={`Token ${name} de ${Math.round(64 * scale)} pixels CSS; força ${attributes.strength}, destreza ${attributes.dexterity}, inteligência ${attributes.wisdom}; nenhum atributo em uso`}>
+      aria-label={`Miniatura do token ${name} de 64 pixels CSS; força ${attributes.strength}, destreza ${attributes.dexterity}, inteligência ${attributes.wisdom}; nenhum atributo em uso`}>
       <circle cx="32" cy="32" r="31" fill="#192d3d" stroke="#91a9bc" strokeWidth="1.5" />
       <circle cx="32" cy="32" r="15" fill="#1678cf" />
       {tokenMarkerPositions().map(({ attribute, index, x, y }) => (

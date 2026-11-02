@@ -63,7 +63,8 @@ test("readiness starts exactly ten seconds, cancels globally and restarts from t
   advance(1);
   assert.equal(match.snapshot().phase, "chapter");
   assert.equal(match.snapshot().simulationMs, 0);
-  const cells = terrainLayout(1920, 1200, 1).placements.flatMap((p) => p.cells);
+  const layout = terrainLayout(1920, 1200, 1);
+  const cells = layout.placements.flatMap((p) => p.cells);
   const positions = match.snapshot().players.map((p) => p.position);
   assert.notDeepEqual(positions[0], positions[1]);
   for (const position of positions) assert.ok(cells.some((c) => c.x === position.x && c.y === position.y));
@@ -72,7 +73,8 @@ test("readiness starts exactly ten seconds, cancels globally and restarts from t
   command({ type: "press", slot: 0 });
   command({ type: "move", slot: 0, position: { x: -500, y: 90000 } });
   command({ type: "release", slot: 0 });
-  assert.ok((match.snapshot().players[0]?.position.x ?? 0) >= 148);
+  assert.equal(match.snapshot().players[0]?.position.x, layout.area.x + layout.tokenDiameter / 2);
+  assert.equal(match.snapshot().players[0]?.position.y, layout.area.y + layout.area.height - layout.tokenDiameter / 2);
 });
 
 test("unused points do not prevent starting, but no configuration can change after countdown", () => {

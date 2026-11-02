@@ -21,6 +21,7 @@ aqui prevalecem sobre alternativas antigas dessa proposta.
 - [x] Validar acesso LAN no tablet real.
 - [x] Corrigir falha de inicialização em HTTP da LAN e validar no navegador.
 - [x] Ocultar menu de jogo e configurações após o início, preservando os controles da partida.
+- [x] Compactar setores, fixar miniatura interna e reorganizar atributos horizontalmente.
 - [ ] Completar o aceite de dez contatos entre tokens e controles no tablet.
 
 **Estado:** etapas 2 e 3 implementadas sobre a geometria de prévia. O servidor
@@ -37,10 +38,16 @@ Após terminar a contagem inicial, as duas abas de configuração e sua coluna
 desaparecem, inclusive durante a pausa; prontidão, pausa, retomada e saída
 continuam disponíveis nos respectivos estados. A entrada escolhe
 três letras (AAA inicialmente), sem duplicar nomes na mesma mesa; abre a aba
-de jogo com “Estou pronto”, sem botão de menu para essa aba. Saída fica logo abaixo do nome e exige confirmação
-no próprio setor. Atributos usam
+de jogo com “Estou pronto”, sem botão de menu para essa aba. Nome fica no extremo
+superior da coluna esquerda e saída no inferior, com confirmação no próprio setor.
+Setores reservam 96 px CSS, independentemente da escala, em vez de 116–140 px.
+A miniatura interna mede sempre 64 px; somente tokens externos e terrenos escalam.
+Atributos usam
 ícones com explicação provisória em modal interno, contador verde +3/+2/+1/+0 e
-alerta vermelho na aba enquanto faltam pontos a distribuir. O jogador distribui
+alerta vermelho na aba enquanto faltam pontos a distribuir. Cada propriedade
+centraliza ícone, valor, − e + na mesma linha da sua coluna; quando o painel
+tem até 320 px de largura, ícone/valor ficam acima de −/+ para preservar
+alvos de toque, conforme alternativa aprovada pelo usuário. O jogador distribui
 três pontos entre força, destreza e inteligência, partindo de 1 em cada atributo.
 Os campos ingleses são `strength`, `dexterity` e `wisdom`.
 Todos prontos iniciam dez segundos regressivos na central; desmarcar qualquer
@@ -82,7 +89,8 @@ da abertura permanece pendente.
 
 **Próxima etapa:** recarregar a página no tablet e confirmar que não fica preta;
 retestar a navegação de configurações sem menu “Jogo”, seu desaparecimento
-após o início, tokens grandes/pequenos, bloqueio de setor,
+após o início, setores de 96 px, atributos compactos/responsivos,
+miniatura fixa, tokens grandes/pequenos, bloqueio de setor,
 dez contatos e o fluxo de prontidão/contagem/cancelamento/pausa/retomada. O usuário
 autorizou avançar à etapa 3 com essa limitação registrada, sem marcar o aceite
 físico como concluído. A próxima implementação é a etapa 4 (mapa procedural e
@@ -157,19 +165,22 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
   de A a Z, começando em AAA. As rodas reutilizáveis aceitam botões, arrasto,
   roda do mouse e setas do teclado, com volta entre A/Z. Nomes duplicados são
   rejeitados atomicamente no servidor, inclusive em entradas simultâneas.
-- Após entrar, a aba de jogo abre com a confirmação “Estou pronto”. Nome e saída
-  ficam à esquerda; saída logo abaixo do nome, sem alinhamento ao rodapé; jogo,
-  calibração e atributos ficam à direita, em colunas verticais de botões de
-  32 px CSS. O botão de saída tem o mesmo tamanho das abas e exige confirmação.
+- Após entrar, o painel de jogo abre com a confirmação “Estou pronto”, sem
+  botão de menu próprio. Nome e saída ficam nas extremidades superior/inferior
+  da coluna esquerda; calibração e atributos ficam à direita, em uma coluna
+  vertical de botões de 32 px CSS somente durante a preparação.
+  Tocar a configuração selecionada novamente ou Escape retorna ao jogo.
+  O botão de saída tem o mesmo tamanho das abas e exige confirmação.
   A confirmação para retomar a pausa reutiliza a estrutura de prontidão.
 - Modais cobrem somente o próprio setor, com fechamento por botão ou Escape,
   foco de teclado contido e controles de fundo inativos. Erros de entrada/ação
   mudam apenas a borda para vermelho; detalhes são anunciados por `role=alert`
   sem texto visível adicional nem alteração do fundo.
-- Um círculo de calibração, incluindo a borda de indicadores, permite ajustar
-  o tamanho para o dedo e a visualização.
-- O multiplicador é compartilhado: quando alguém ajusta, todos os tokens e
-  elementos do terreno ajustam proporcionalmente.
+- Uma miniatura de 64 px CSS, incluindo a borda de indicadores, acompanha
+  os controles de calibração, sem aumentar/reduzir dentro do setor.
+- O multiplicador é compartilhado: quando alguém ajusta, todos os tokens
+  externos e elementos do terreno ajustam proporcionalmente. O tamanho para
+  o dedo deve ser conferido no token externo, não na miniatura fixa.
 - Trata-se da escala interna do jogo, não do zoom do navegador.
 - Diâmetro máximo inicial do token: **64 pixels CSS**, incluindo todos os
   indicadores de status desenhados dentro da borda, sem aumentar sua dimensão.
@@ -179,9 +190,9 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
 - Primeiro calcular a célula; depois encaixar componentes completos de sete
   células na área útil. Nunca reduzir células automaticamente para caber mais.
 - A prévia usa uma malha de componentes sem células sobrepostas e apenas
-  componentes inteiros. Os setores reservam profundidade de `max(116, 64s + 12)`
+  componentes inteiros. Os setores reservam profundidade fixa de `96`
   pixels CSS, limitada a 18% da largura nas laterais e 30% da altura acima/abaixo.
-  A reserva acompanha a escala sem reduzir células; telas pequenas podem não
+  A reserva não acompanha a escala nem reduz células; telas pequenas podem não
   comportar a prévia, com aviso explícito.
 - O comprimento dos setores laterais é limitado a 480 px CSS, 54% da altura e
   ao vão entre setores superiores/inferiores menos 12 px, evitando sobreposição.
@@ -543,8 +554,10 @@ docker compose stop
   indicados; pontos restantes não impedem prontidão, mas não poderão ser
   distribuídos após o início.
 - O painel tem quatro colunas: contador +N verde grande e força, destreza,
-  inteligência. Braço musculoso, tênis em movimento e cérebro substituem os
-  textos; tocar no ícone abre título e lorem ipsum em modal interno fechável.
+  inteligência. Cada propriedade centraliza a linha `ícone valor − +`.
+  Com painel de até 320 px, cada coluna usa ícone/valor acima e −/+ abaixo
+  para evitar botões estreitos demais. Ícones substituem os textos;
+  tocar no ícone abre título e lorem ipsum em modal interno fechável.
   Níveis 2/3 ficam verdes. O componente `TouchButton` oferece um indicador
   vermelho absoluto no canto superior direito, usado na aba de atributos
   enquanto houver pontos livres, sem depender de um texto visível.
@@ -563,7 +576,8 @@ docker compose stop
   vermelha, verde e roxa do exemplo representam regiões de indicadores; a
   associação definitiva entre cores e atributos ainda não foi escolhida.
 - O diâmetro externo de toda a composição (centro mais faixas) é `64s` pixels
-  CSS. As faixas ocupam parte do disco, não um anel extra fora do token. Centro,
+  CSS no tabuleiro e 64 px fixos na miniatura do setor. As faixas ocupam parte
+  do disco, não um anel extra fora do token. Centro,
   espessura das faixas e ícones escalam proporcionalmente.
 - Mostrar os níveis em uso com preenchimento/segmentos e ícones identificáveis,
   sem depender exclusivamente de cor. O desenho de referência define o formato,
@@ -862,6 +876,8 @@ sem duplicar controladores ou expor informações ocultas.
 | 2026-11-01 | Corrigida tela preta no Chrome em HTTP pela LAN: UUID v4 via `getRandomValues`, identidade por aba preservada e falhas de inicialização exibidas na central. Cinco testes do jogo incluídos no runner principal. | `npm run test -w @terror/game`, `npm run build -w @terror/game`, `npm test` (12 contratos + 10 servidor + 5 jogo), publicação somente de `game` com `--no-deps` e `npm run check:stack` passaram. Navegador em `http://192.168.68.108:8080` confirmou contexto não seguro sem `randomUUID`, conexão, oito setores, mesma identidade após recarga e canvas/viewport/área de rolagem coincidentes em 1200×750 e 2400×1500 CSS, sem erros JavaScript. Armazenamento bloqueado simulado mostrou alerta e indicador vermelho, preservando canvas e setores. Servidor/banco não reiniciados; abertura no tablet físico e dez contatos continuam pendentes. |
 
 | 2026-11-01 | Botão do menu “Jogo” removido; painel padrão preservado e retorno pela configuração selecionada ou Escape. Token/personagem e sua coluna ocultos após a contagem inicial, inclusive na pausa, sem alterar a reserva geométrica necessária à calibração/atributos. | `npm run build -w @terror/game`, cinco testes existentes do jogo, publicação somente de `game` com `--no-deps` e `npm run check:stack` passaram. Página isolada no navegador, com Socket.IO simulado e sem alterar a mesa ocupada, confirmou ausência de menu Jogo, abertura/retorno de token, atributos/Escape/setas, duas abas na contagem e nenhuma em capítulo/partida/pausa, painel de pausa/retomada disponível, duas colunas após início e retorno à prontidão/configurações no lobby, sem erros JavaScript. Reteste físico pendente; servidor e banco não reiniciados. |
+
+| 2026-11-01 | Setores compactados para 96 px CSS fixos; nome no topo e saída no rodapé da coluna esquerda; miniatura interna fixa em 64 px, preservando escala externa. Atributos centralizados por coluna como ícone/valor/−/+; alternativa responsiva aprovada mantém ícone/valor acima de −/+ em painéis estreitos. Rodas de nome compactadas sem rolagem interna. Reserva compartilhada de mapa e teste de limites de movimento atualizados. | `npm run build`, `npm test` (12 contratos + 10 servidor + 5 jogo), integração API/Socket.IO em PostgreSQL isolado pelo perfil `test`, builds/publicação de servidor e jogo e `npm run check:stack` passaram. Servidor recriado com autorização do usuário; volume da partida preservado. Navegador real confirmou distribuição/reembolso, modal, nome/saída nas extremidades, miniatura ≈64 px antes/depois de escala 1→2 e token externo 128 px com menos terrenos. Layout final mediu atributos em linha com altura ≈32 px em 1920×1200 CSS e duas linhas ≈66 px em 960×600, com botões ≈27 px de largura nessa tela; entrada sem rolagem. Página isolada com oito jogadores confirmou setores de 96 px nas duas resoluções, nenhum controle cortado, miniaturas fixas em escala 2 e configurações ocultas em partida/pausa, sem erros JavaScript. Mesa de teste devolvida ao lobby vazio/escala 1 e PostgreSQL de teste parado; aceite físico de controles compactos, rodas menores e dez contatos permanece pendente. |
 
 Adicionar novas linhas com entregas reais e evidências de validação. Não listar
 como concluídos comportamentos ainda apenas planejados.

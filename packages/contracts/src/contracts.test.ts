@@ -148,10 +148,13 @@ test("whole seven-cell terrains fit the usable area without overlap or clipping"
 
 test("the playable area reserves all eight player sectors at each viewport size", () => {
   const area = boardArea(1920, 1200);
-  assert.deepEqual(area, { x: 116, y: 116, width: 1688, height: 968 });
-  assert.deepEqual(boardArea(800, 600), { x: 116, y: 116, width: 568, height: 368 });
+  assert.deepEqual(area, { x: 96, y: 96, width: 1728, height: 1008 });
+  assert.deepEqual(boardArea(800, 600), { x: 96, y: 96, width: 608, height: 408 });
   assert.deepEqual(boardArea(100, 100), { x: 18, y: 30, width: 64, height: 40 });
-  assert.deepEqual(boardArea(1920, 1200, 2), { x: 140, y: 140, width: 1640, height: 920 });
+  for (const scale of [0.5, 1, 2]) {
+    assert.deepEqual(boardArea(1920, 1200, scale), area);
+    assert.equal(cellDimensions(scale).tokenDiameter, 64 * scale);
+  }
   assert.ok(area.width * area.height > 1616 * 896);
   assert.deepEqual(boardArea(0, 0), { x: 0, y: 0, width: 0, height: 0 });
   assert.throws(() => boardArea(Infinity, 100));

@@ -33,7 +33,8 @@ export function hexCorners(center: Point, radius: number): Point[] {
 }
 
 export function playerSectorDepth(scale: number): number {
-  return Math.max(116, cellDimensions(scale).tokenDiameter + 12);
+  z.number().positive().finite().parse(scale);
+  return 96;
 }
 
 export function tokenHitCircle(diameter: number) {

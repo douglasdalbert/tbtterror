@@ -122,7 +122,7 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, p
                   <div className="calibration-controls">
                     <TouchButton aria-label={`Diminuir escala compartilhada de ${identity}`}
                       disabled={busy || scale <= 0.5} onPress={() => onScale(-0.05)}>−</TouchButton>
-                    <CalibrationToken scale={scale} name={identity} attributes={attributes} />
+                    <CalibrationToken name={identity} attributes={attributes} />
                     <TouchButton aria-label={`Aumentar escala compartilhada de ${identity}`}
                       disabled={busy || scale >= 2} onPress={() => onScale(0.05)}>+</TouchButton>
                   </div>
@@ -137,13 +137,11 @@ export function PlayerSector({ slot, name, attributes, error, canEnter, scale, p
                           onPress={() => setDialog(attribute)}><AttributeIcon attribute={attribute} /></TouchButton>
                         <output className={attributes[attribute] > 1 ? "attribute-value--allocated" : ""}
                           aria-label={`${label} de ${identity}`}>{attributes[attribute]}</output>
-                        <div className="attribute-adjustments">
-                          <TouchButton aria-label={`Diminuir ${label} de ${identity}`}
-                            disabled={busy || attributes[attribute] <= 1} onPress={() => onAttribute(attribute, -1)}>−</TouchButton>
-                          <TouchButton aria-label={`Aumentar ${label} de ${identity}`}
-                            disabled={busy || attributes[attribute] >= 3 || availablePoints === 0}
-                            onPress={() => onAttribute(attribute, 1)}>+</TouchButton>
-                        </div>
+                        <TouchButton aria-label={`Diminuir ${label} de ${identity}`}
+                          disabled={busy || attributes[attribute] <= 1} onPress={() => onAttribute(attribute, -1)}>−</TouchButton>
+                        <TouchButton aria-label={`Aumentar ${label} de ${identity}`}
+                          disabled={busy || attributes[attribute] >= 3 || availablePoints === 0}
+                          onPress={() => onAttribute(attribute, 1)}>+</TouchButton>
                       </div>
                     ))}
                   </div>
