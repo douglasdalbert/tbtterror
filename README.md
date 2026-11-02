@@ -118,11 +118,12 @@ o botão de cor aleatória e o modal de cores, incluindo a cor atual destacada.
 Depois, o usuário confirmou o aceite físico do checklist no tablet e informou
 que tudo funcionou.
 
-**Próxima etapa:** concluir os testes integrados e o aceite físico no tablet de
-movimento, colisões e névoa; também testar visualmente o mapa modular. Antes de
-validar a alcançabilidade, definir as regras do primeiro objetivo e suas
-dependências; a exigência de força 2 para combustível continua sendo proposta,
-não decisão.
+**Próxima etapa:** publicar e testar no tablet o limite de movimento, colisões,
+névoa e mapa modular. O movimento é livre durante a preparação e limitado pela
+destreza somente durante a fase `running`. O aceite físico ainda não ocorreu.
+Antes de validar a alcançabilidade, definir as regras do primeiro objetivo e
+suas dependências; a exigência de força 2 para combustível continua sendo
+proposta, não decisão.
 
 **Primeiro marco jogável:** entrada dos jogadores, calibração compartilhada,
 tokens com movimento simultâneo e obstáculos simples no tablet real.

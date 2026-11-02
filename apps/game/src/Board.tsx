@@ -135,11 +135,13 @@ class TerrainPreviewScene extends Phaser.Scene {
     const elapsed = Math.max(0, time - (this.#lastInput.get(drag.slot) ?? time));
     this.#lastInput.set(drag.slot, time);
     const dexterity = this.#players.find(({ slot }) => slot === drag.slot)?.attributes.dexterity ?? 1;
-    const maxDistance = layout.width * 0.5 * movementMultiplier(dexterity) * elapsed / 1000;
     const deltaX = requested.x - current.x;
     const deltaY = requested.y - current.y;
     const distance = Math.hypot(deltaX, deltaY);
-    const fraction = distance > maxDistance && distance > 0 ? maxDistance / distance : 1;
+    const maxDistance = layout.width * 0.5 * movementMultiplier(dexterity) * elapsed / 1000;
+    const fraction = this.#snapshot?.phase === "running" && distance > maxDistance && distance > 0
+      ? maxDistance / distance
+      : 1;
     this.#positions.set(drag.slot, {
       x: current.x + deltaX * fraction,
       y: current.y + deltaY * fraction,
