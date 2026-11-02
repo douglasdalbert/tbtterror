@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { terrainLayout, type Catalog, type MatchCommand } from "@terror/contracts";
+import {
+  generateTerrainMap, terrainLayout, terrainMapCells, type Catalog, type MatchCommand,
+} from "@terror/contracts";
 import { readConfig } from "../config.js";
 import { Match } from "../match.js";
 
@@ -60,25 +62,34 @@ test("readiness starts exactly ten seconds, cancels globally and restarts from t
   assert.equal(match.snapshot().phase, "lobby");
   command({ type: "ready", slot: 1, value: true });
   assert.equal(match.snapshot().remainingMs, 10000);
+  assert.ok(match.snapshot().terrainSeed);
   advance(3000);
   assert.equal(match.snapshot().remainingMs, 7000);
   command({ type: "ready", slot: 0, value: false });
   assert.equal(match.snapshot().phase, "lobby");
   assert.equal(match.snapshot().remainingMs, 0);
+  assert.equal(match.snapshot().terrainSeed, null);
   assert.equal(match.snapshot().players[1]?.ready, true);
   advance(20000);
   command({ type: "ready", slot: 0, value: true });
   assert.equal(match.snapshot().remainingMs, 10000);
+  const terrainSeed = match.snapshot().terrainSeed;
+  assert.ok(terrainSeed);
   advance(9999);
   assert.equal(match.snapshot().phase, "countdown");
   advance(1);
   assert.equal(match.snapshot().phase, "chapter");
+  assert.equal(match.snapshot().terrainSeed, terrainSeed);
   assert.equal(match.snapshot().simulationMs, 0);
   const layout = terrainLayout(1920, 1200, 1);
-  const cells = layout.placements.flatMap((p) => p.cells);
+  const cells = terrainMapCells(generateTerrainMap(1920, 1200, 1, terrainSeed));
   const positions = match.snapshot().players.map((p) => p.position);
   assert.notDeepEqual(positions[0], positions[1]);
-  for (const position of positions) assert.ok(cells.some((c) => c.x === position.x && c.y === position.y));
+  for (const position of positions) {
+    assert.ok(cells.some((cell) => cell.traversable
+      && layout.width * (cell.q + cell.r / 2) + 960 === position.x
+      && layout.radius * 1.5 * cell.r + 600 === position.y));
+  }
   advance(2000);
   assert.equal(match.snapshot().phase, "running");
   command({ type: "press", slot: 0 });
@@ -86,6 +97,19 @@ test("readiness starts exactly ten seconds, cancels globally and restarts from t
   command({ type: "release", slot: 0 });
   assert.equal(match.snapshot().players[0]?.position.x, layout.area.x + layout.tokenDiameter / 2);
   assert.equal(match.snapshot().players[0]?.position.y, layout.area.y + layout.area.height - layout.tokenDiameter / 2);
+});
+
+test("a screen too small for every player rejects readiness without starting", () => {
+  const { match, command } = fixture();
+  command({ type: "join", slot: 0, name: "AAA", color: "red" });
+  command({ type: "viewport", width: 320, height: 320 });
+  for (let index = 0; index < 20; index++) command({ type: "scale", slot: 0, delta: 0.05 });
+  const result = match.command("tablet", { type: "ready", slot: 0, value: true });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.error, /mapa modular não comporta/i);
+  assert.equal(match.snapshot().phase, "lobby");
+  assert.equal(match.snapshot().players[0]?.ready, false);
+  assert.equal(match.snapshot().terrainSeed, null);
 });
 
 test("unused points do not prevent starting, but no configuration can change after countdown", () => {

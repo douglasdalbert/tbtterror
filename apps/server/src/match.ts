@@ -2,9 +2,11 @@ import { randomUUID } from "node:crypto";
 import {
   catalogSchema,
   matchSnapshotSchema,
-  allocateAttributePoint, initialPlayerAttributes, playerAttributesSchema, matchCommandSchema, terrainLayout, initialTokenPosition,
+  allocateAttributePoint, generateTerrainMap, initialPlayerAttributes, playerAttributesSchema,
+  matchCommandSchema, terrainLayout, terrainMapCells, initialTokenPosition,
   type CommandResult, type MatchPlayer,
   type Catalog,
+  type GeneratedTerrainMap,
   type MatchSnapshot,
 } from "@terror/contracts";
 
@@ -23,6 +25,7 @@ export class Match {
   #lastTime: number;
   #chapter = "";
   #error = "";
+  #terrain: GeneratedTerrainMap | null = null;
   readonly #now: () => number;
 
   constructor(catalog: Catalog, now: () => number = () => performance.now()) {
@@ -48,6 +51,7 @@ export class Match {
       chapter: this.#chapter,
       error: this.#error,
       controlSlots: owner ? [...this.#owners].filter(([, o]) => o === owner).map(([slot]) => slot).sort((a, b) => a - b) : [],
+      terrainSeed: this.#terrain?.seed ?? null,
     });
   }
 
@@ -98,9 +102,16 @@ export class Match {
     if (this.#remainingMs > 0) return true;
     if (this.#phase === "countdown") {
       const layout = terrainLayout(this.#arena.width, this.#arena.height, this.#arena.scale);
-      const cells = layout.placements.flatMap((p) => p.cells);
+      const cells = this.#terrain
+        ? terrainMapCells(this.#terrain)
+          .filter((cell) => cell.traversable)
+          .map(({ q, r }) => ({
+            x: this.#arena.width / 2 + layout.width * (q + r / 2),
+            y: this.#arena.height / 2 + layout.radius * 1.5 * r,
+          }))
+        : [];
       if (cells.length < this.#players.size) {
-        this.#error = "Falha ao validar as posições iniciais. Ajuste a escala e confirme a prontidão novamente.";
+        this.#error = "O mapa não comporta as posições iniciais. Ajuste a escala e confirme a prontidão novamente.";
         this.#cancelCountdown();
         this.#players.forEach((p) => { p.ready = false; });
         return true;
@@ -184,6 +195,7 @@ export class Match {
         this.#simulationMs = 0;
         this.#chapter = "";
         this.#error = "";
+        this.#terrain = null;
         this.#remainingMs = 0;
         this.#resumeRemainingMs = 0;
       } else if (this.#phase === "countdown") this.#cancelCountdown();
@@ -214,8 +226,19 @@ export class Match {
       this.#resetPreparation();
     } else if (command.type === "ready") {
       if (command.value) {
-        const layout = terrainLayout(this.#arena.width, this.#arena.height, this.#arena.scale);
-        if (layout.placements.length * 7 < this.#players.size) return fail("Não cabe um terreno completo para todos nesta escala.");
+        if (this.#phase !== "countdown" && !this.#terrain) {
+          const terrain = generateTerrainMap(
+            this.#arena.width,
+            this.#arena.height,
+            this.#arena.scale,
+            randomUUID(),
+          );
+          const availableCells = terrainMapCells(terrain).filter((cell) => cell.traversable).length;
+          if (availableCells < this.#players.size) {
+            return fail("O mapa modular não comporta todos os jogadores nesta escala.");
+          }
+          this.#terrain = terrain;
+        }
       }
       player.ready = command.value;
       this.#error = "";
@@ -233,6 +256,7 @@ export class Match {
   #cancelCountdown() {
     if (this.#phase === "countdown") this.#phase = "lobby";
     this.#remainingMs = 0;
+    this.#terrain = null;
   }
 
   #resetPreparation() {

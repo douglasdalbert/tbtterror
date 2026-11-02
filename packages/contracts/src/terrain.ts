@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { terrainLayout } from "./layout.js";
 
 export const hexDirections = [
   { q: 1, r: 0 },
@@ -124,8 +125,74 @@ export const terrainModuleCatalogSchema = z.array(terrainModuleSchema).min(1).su
   }
 });
 
+const terrainModulePlacementSchema = z.strictObject({
+  id: identifierSchema,
+  q: z.number().int(),
+  r: z.number().int(),
+  rotation: z.number().int().min(0).max(5),
+});
+
+export const generatedTerrainMapSchema = z.strictObject({
+  seed: z.string().min(1).max(128),
+  modules: z.array(terrainModulePlacementSchema).max(8000),
+}).superRefine((map, context) => {
+  const origins = new Set<string>();
+  for (const [index, module] of map.modules.entries()) {
+    const key = `${module.q},${module.r}`;
+    if (origins.has(key)) {
+      context.addIssue({
+        code: "custom",
+        path: ["modules", index],
+        message: "Dois módulos não podem ocupar a mesma origem.",
+      });
+    }
+    origins.add(key);
+  }
+});
+
 export type TerrainModuleCell = z.infer<typeof terrainModuleCellSchema>;
 export type TerrainModule = z.infer<typeof terrainModuleSchema>;
+export type GeneratedTerrainMap = z.infer<typeof generatedTerrainMapSchema>;
+
+function createStarterModule(
+  id: string,
+  name: string,
+  cells: Partial<Pick<TerrainModuleCell, "terrainType" | "actions" | "objectSlots">>[],
+): TerrainModule {
+  return terrainModuleSchema.parse({
+    id,
+    name,
+    cells: moduleCoordinates.map(({ q, r }, index) => ({
+      q,
+      r,
+      terrainType: "path",
+      traversable: true,
+      actions: [],
+      objectSlots: [],
+      connectors: Array(6).fill("path"),
+      ...cells[index],
+    })),
+  });
+}
+
+export const STARTER_TERRAIN_MODULES = terrainModuleCatalogSchema.parse([
+  createStarterModule("clearing", "Clareira", [
+    { terrainType: "clearing", actions: ["start"] },
+  ]),
+  createStarterModule("cabin", "Cabana", [
+    { terrainType: "room" },
+    { actions: ["search"] },
+    { objectSlots: ["item"] },
+  ]),
+  createStarterModule("grove", "Bosque", [
+    {},
+    {},
+    {},
+    {},
+    {},
+    { terrainType: "clearing", objectSlots: ["item"] },
+  ]),
+]);
 
 export function rotateTerrainModule(module: TerrainModule, steps: number): TerrainModule {
   const validated = terrainModuleSchema.parse(module);
@@ -153,26 +220,213 @@ export function rotateTerrainModule(module: TerrainModule, steps: number): Terra
   });
 }
 
+function modulesConnectValidated(
+  left: TerrainModule,
+  right: TerrainModule,
+  secondOrigin: { q: number; r: number },
+): boolean {
+  const rightCells = new Map(right.cells.map((cell) => [
+    `${cell.q + secondOrigin.q},${cell.r + secondOrigin.r}`,
+    cell,
+  ]));
+  const leftPositions = new Set(left.cells.map(({ q, r }) => `${q},${r}`));
+  if ([...rightCells.keys()].some((key) => leftPositions.has(key))) return false;
+  let connected = false;
+  for (const cell of left.cells) {
+    for (const [direction, offset] of hexDirections.entries()) {
+      const neighbor = rightCells.get(`${cell.q + offset.q},${cell.r + offset.r}`);
+      if (!neighbor) continue;
+      const connector = cell.connectors[direction];
+      if (connector !== neighbor.connectors[(direction + 3) % 6]) return false;
+      if (connector !== null) connected = true;
+    }
+  }
+  return connected;
+}
+
 export function terrainModulesConnect(
   first: TerrainModule,
   second: TerrainModule,
   secondOrigin: { q: number; r: number },
 ): boolean {
-  const left = terrainModuleSchema.parse(first);
-  const right = terrainModuleSchema.parse(second);
-  const rightCells = right.cells.map((cell) => ({
-    ...cell,
-    q: cell.q + secondOrigin.q,
-    r: cell.r + secondOrigin.r,
-  }));
-  const leftPositions = new Set(left.cells.map(({ q, r }) => `${q},${r}`));
-  if (rightCells.some(({ q, r }) => leftPositions.has(`${q},${r}`))) return false;
-  for (const cell of left.cells) {
-    for (const [direction, offset] of hexDirections.entries()) {
-      const neighbor = rightCells.find(({ q, r }) => q === cell.q + offset.q && r === cell.r + offset.r);
-      if (neighbor && cell.connectors[direction] !== null
-        && cell.connectors[direction] === neighbor.connectors[(direction + 3) % 6]) return true;
+  return modulesConnectValidated(
+    terrainModuleSchema.parse(first),
+    terrainModuleSchema.parse(second),
+    secondOrigin,
+  );
+}
+
+function seededRandom(seed: string): () => number {
+  let state = 0x811c9dc5;
+  for (const character of seed) {
+    state = Math.imul(state ^ character.charCodeAt(0), 0x01000193);
+  }
+  return () => {
+    state += 0x6d2b79f5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function shuffled<T>(values: T[], random: () => number): T[] {
+  const result = [...values];
+  for (let index = result.length - 1; index > 0; index--) {
+    const other = Math.floor(random() * (index + 1));
+    [result[index], result[other]] = [result[other]!, result[index]!];
+  }
+  return result;
+}
+
+function placementOrigin(placement: { cells: { q: number; r: number }[] }) {
+  return {
+    q: Math.round(placement.cells.reduce((sum, cell) => sum + cell.q, 0) / placement.cells.length),
+    r: Math.round(placement.cells.reduce((sum, cell) => sum + cell.r, 0) / placement.cells.length),
+  };
+}
+
+export function generateTerrainMap(
+  width: number,
+  height: number,
+  scale: number,
+  seed: string,
+  catalog: TerrainModule[] = STARTER_TERRAIN_MODULES,
+): GeneratedTerrainMap {
+  const modules = terrainModuleCatalogSchema.parse(catalog);
+  z.string().min(1).max(128).parse(seed);
+  const layout = terrainLayout(width, height, scale);
+  if (layout.placements.length === 0) return generatedTerrainMapSchema.parse({ seed, modules: [] });
+
+  const origins = layout.placements.map(placementOrigin);
+  const cellOwners = new Map<string, number>();
+  layout.placements.forEach((placement, index) => {
+    for (const cell of placement.cells) cellOwners.set(`${cell.q},${cell.r}`, index);
+  });
+  const neighbors = layout.placements.map(() => new Set<number>());
+  layout.placements.forEach((placement, index) => {
+    for (const cell of placement.cells) {
+      for (const direction of hexDirections) {
+        const owner = cellOwners.get(`${cell.q + direction.q},${cell.r + direction.r}`);
+        if (owner !== undefined && owner !== index) neighbors[index]!.add(owner);
+      }
+    }
+  });
+
+  const components: number[][] = [];
+  const visited = new Set<number>();
+  for (let start = 0; start < layout.placements.length; start++) {
+    if (visited.has(start)) continue;
+    const component: number[] = [];
+    const queue = [start];
+    let queueIndex = 0;
+    visited.add(start);
+    while (queueIndex < queue.length) {
+      const index = queue[queueIndex++]!;
+      component.push(index);
+      for (const neighbor of neighbors[index]!) {
+        if (visited.has(neighbor)) continue;
+        visited.add(neighbor);
+        queue.push(neighbor);
+      }
+    }
+    components.push(component);
+  }
+
+  const distanceToCenter = (index: number) => {
+    const center = layout.placements[index]!.center;
+    return Math.hypot(center.x - width / 2, center.y - height / 2);
+  };
+  components.sort((left, right) =>
+    right.length - left.length || distanceToCenter(left[0]!) - distanceToCenter(right[0]!),
+  );
+  const mainComponent = components[0]!;
+  const mainComponentSet = new Set(mainComponent);
+  const root = mainComponent.reduce((best, index) =>
+    distanceToCenter(index) < distanceToCenter(best) ? index : best,
+  );
+  const random = seededRandom(seed);
+  const order: number[] = [];
+  const orderQueue = [root];
+  const ordered = new Set([root]);
+  let orderQueueIndex = 0;
+  while (orderQueueIndex < orderQueue.length) {
+    const index = orderQueue[orderQueueIndex++]!;
+    order.push(index);
+    for (const neighbor of shuffled([...neighbors[index]!], random)) {
+      if (!mainComponentSet.has(neighbor) || ordered.has(neighbor)) continue;
+      ordered.add(neighbor);
+      orderQueue.push(neighbor);
     }
   }
-  return false;
+
+  const variants = modules.flatMap((module) => Array.from({ length: 6 }, (_, rotation) => ({
+    id: module.id,
+    rotation,
+    module: rotateTerrainModule(module, rotation),
+  })));
+  const compatibility = new Map<string, boolean>();
+  const connects = (firstIndex: number, secondIndex: number, origin: { q: number; r: number }) => {
+    const key = `${firstIndex}:${secondIndex}:${origin.q},${origin.r}`;
+    if (!compatibility.has(key)) {
+      compatibility.set(key, modulesConnectValidated(
+        variants[firstIndex]!.module,
+        variants[secondIndex]!.module,
+        origin,
+      ));
+    }
+    return compatibility.get(key)!;
+  };
+  const placed = new Map<number, number>();
+  const clearing = modules.find((module) => module.id === "clearing") ?? modules[0]!;
+  for (const index of order) {
+    const attached = [...neighbors[index]!].filter((neighbor) => placed.has(neighbor));
+    const candidates = variants.flatMap(({ id }, variantIndex) =>
+      index !== root || id === clearing.id ? [variantIndex] : [],
+    ).filter((variantIndex) => attached.every((neighbor) => {
+        const origin = origins[index]!;
+        const parentOrigin = origins[neighbor]!;
+        return connects(
+          placed.get(neighbor)!,
+          variantIndex,
+          { q: origin.q - parentOrigin.q, r: origin.r - parentOrigin.r },
+        );
+      }));
+    if (candidates.length === 0) {
+      throw new Error("Não foi possível encaixar os módulos de terreno sem conectores incompatíveis.");
+    }
+    placed.set(index, candidates[Math.floor(random() * candidates.length)]!);
+  }
+
+  return generatedTerrainMapSchema.parse({
+    seed,
+    modules: order.map((index) => {
+      const variant = variants[placed.get(index)!]!;
+      return { id: variant.id, ...origins[index]!, rotation: variant.rotation };
+    }),
+  });
+}
+
+export function terrainMapCells(
+  map: GeneratedTerrainMap,
+  catalog: TerrainModule[] = STARTER_TERRAIN_MODULES,
+): (TerrainModuleCell & { q: number; r: number })[] {
+  const validatedMap = generatedTerrainMapSchema.parse(map);
+  const byId = new Map(terrainModuleCatalogSchema.parse(catalog).map((module) => [module.id, module]));
+  const cells = validatedMap.modules.flatMap((placement) => {
+    const module = byId.get(placement.id);
+    if (!module) throw new Error(`O módulo ${placement.id} não existe no catálogo de terrenos.`);
+    return rotateTerrainModule(module, placement.rotation).cells.map((cell) => ({
+      ...cell,
+      q: cell.q + placement.q,
+      r: cell.r + placement.r,
+    }));
+  });
+  const coordinates = new Set<string>();
+  for (const cell of cells) {
+    const key = `${cell.q},${cell.r}`;
+    if (coordinates.has(key)) throw new Error("O mapa gerado contém células sobrepostas.");
+    coordinates.add(key);
+  }
+  return cells;
 }

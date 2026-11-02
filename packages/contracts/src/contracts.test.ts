@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   allocateAttributePoint, attributesSchema, availableAttributePoints, initialPlayerAttributes,
   PLAYER_COLORS, PLAYER_COLOR_IDS, playerColorSchema,
+  generateTerrainMap, generatedTerrainMapSchema, STARTER_TERRAIN_MODULES, terrainMapCells,
   matchSnapshotSchema, parseApiResponse, playerAttributesSchema, settingsSchema,
   enterPreparationPlayer, leavePreparationPlayer, changePreparationAttribute, rotatePlayerName, type PreparationState,
   rotateTerrainModule, terrainModuleCatalogSchema, terrainModuleSchema, terrainModulesConnect, type TerrainModule,
@@ -193,7 +194,50 @@ test("terrain modules only connect through matching reciprocal boundary connecto
     })),
   };
   assert.equal(terrainModulesConnect(module, incompatible, { q: 2, r: 1 }), false);
+  const partiallyMismatched = terrainModuleSchema.parse({
+    ...module,
+    id: "partial",
+    cells: module.cells.map((cell) => ({
+      ...cell,
+      connectors: cell.q === 0 && cell.r === -1
+        ? ["wall", "wall", "wall", "path", "wall", "wall"]
+        : Array(6).fill("wall"),
+    })),
+  });
+  assert.equal(terrainModulesConnect(module, partiallyMismatched, { q: 2, r: 1 }), false);
   assert.equal(terrainModulesConnect(module, module, { q: 0, r: 0 }), false);
+});
+
+test("seeded terrain generation fits whole connected modules and expands to unique cells", () => {
+  const first = generateTerrainMap(1920, 1200, 1, "map-seed");
+  const repeated = generateTerrainMap(1920, 1200, 1, "map-seed");
+  const other = generateTerrainMap(1920, 1200, 1, "different-seed");
+  assert.deepEqual(first, repeated);
+  assert.notDeepEqual(first, other);
+  assert.equal(first.modules[0]?.id, "clearing");
+  assert.ok(first.modules.length > 1);
+  assert.equal(generatedTerrainMapSchema.safeParse(first).success, true);
+  assert.equal(new Set(first.modules.map(({ rotation }) => rotation)).size > 1, true);
+  assert.equal(new Set(first.modules.map(({ id }) => id)).size > 1, true);
+  const cells = terrainMapCells(first);
+  assert.equal(cells.length, first.modules.length * 7);
+  assert.equal(new Set(cells.map(({ q, r }) => `${q},${r}`)).size, cells.length);
+  assert.ok(cells.filter(({ traversable }) => traversable).length >= first.modules.length * 6);
+  assert.equal(terrainMapCells(generateTerrainMap(320, 320, 2, "too-small")).length, 0);
+  assert.ok(
+    generateTerrainMap(1920, 1200, 2, "map-seed").modules.length < first.modules.length,
+  );
+  const maximumArena = generateTerrainMap(7680, 7680, 0.5, "maximum-arena");
+  assert.ok(maximumArena.modules.length > 0);
+  assert.ok(maximumArena.modules.length <= 8000);
+  assert.equal(STARTER_TERRAIN_MODULES.length, 3);
+  assert.equal(generatedTerrainMapSchema.safeParse({
+    seed: "overlap",
+    modules: [
+      { id: "clearing", q: 0, r: 0, rotation: 0 },
+      { id: "cabin", q: 0, r: 0, rotation: 1 },
+    ],
+  }).success, false);
 });
 
 test("lobby snapshots cannot accidentally include hidden world data", () => {
@@ -203,6 +247,7 @@ test("lobby snapshots cannot accidentally include hidden world data", () => {
     catalogRevision: 1,
     players: [], arena: { width: 1920, height: 1200, scale: 1 },
     remainingMs: 0, resumeRemainingMs: 0, simulationMs: 0, chapter: "", error: "", controlSlots: [],
+    terrainSeed: null,
   };
   assert.equal(matchSnapshotSchema.safeParse(snapshot).success, true);
   assert.equal(matchSnapshotSchema.safeParse({ ...snapshot, phase: "paused", resumeRemainingMs: 10000 }).success, true);
@@ -210,6 +255,8 @@ test("lobby snapshots cannot accidentally include hidden world data", () => {
     assert.equal(matchSnapshotSchema.safeParse({ ...snapshot, resumeRemainingMs }).success, false);
   }
   assert.equal(matchSnapshotSchema.safeParse({ ...snapshot, monsterPosition: [1, 2] }).success, false);
+  assert.equal(matchSnapshotSchema.safeParse({ ...snapshot, terrainSeed: "" }).success, false);
+  assert.equal(matchSnapshotSchema.safeParse({ ...snapshot, terrain: null }).success, false);
 });
 
 test("touch circles follow the actual token diameter through increasing and decreasing scales", () => {

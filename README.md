@@ -15,7 +15,7 @@ aqui prevalecem sobre alternativas antigas dessa proposta.
 - [x] Levantar a proposta de jogo.
 - [x] Escolher arquitetura, infraestrutura e geometria do mapa.
 - [x] Registrar requisitos, etapas e instruções para continuidade.
-- [x] Implementar a base técnica (aceite no tablet real ainda pendente).
+- [x] Implementar a base técnica e validar o acesso LAN no tablet real.
 - [x] Implementar o fluxo local de seleção, calibração e tokens da etapa 2.
 - [x] Implementar início, capítulo e pausa autoritativos sobre a geometria atual.
 - [x] Validar acesso LAN no tablet real.
@@ -23,15 +23,19 @@ aqui prevalecem sobre alternativas antigas dessa proposta.
 - [x] Ocultar menu de jogo e configurações após o início, preservando os controles da partida.
 - [x] Compactar setores, fixar miniatura interna e reorganizar atributos horizontalmente.
 - [x] Selecionar cor exclusiva para cada token durante a entrada do jogador.
-- [ ] Completar o aceite de dez contatos entre tokens e controles no tablet.
+- [x] Completar no tablet o aceite do fluxo de entrada, controles e dez contatos simultâneos.
 
-**Estado:** etapas 2 e 3 implementadas sobre a geometria de prévia. O servidor
+**Estado:** etapas 2 e 3 tiveram o aceite físico confirmado pelo usuário.
+Iniciada a etapa 4: há três módulos iniciais tipados e uma geração determinística
+por seed que monta componentes conectados, aplica rotações de 60° e respeita a
+área útil e a escala. O servidor retém o mapa e transmite a seed; o cliente usa
+o mesmo gerador para renderizar os tipos de célula sem enviar toda a geometria
+em cada snapshot. Ainda faltam a validação de objetivos alcançáveis
+(regras não definidas) e o aceite visual do mapa gerado no tablet. O servidor
 agora mantém participantes, atributos, escala, posições, prontidão, contagem,
 capítulo, pausa e cores dos tokens em memória, com contratos validados e
-comandos Socket.IO. A base de contratos da etapa 4 valida módulos hexagonais
-com sete células, capacidades independentes, caminhos conectados e conectores
-recíprocos; ainda não há módulos autorados nem geração integrada à partida.
-Objetivos, obstáculos e mapa procedural jogável permanecem pendentes.
+comandos Socket.IO. A geração recusa iniciar se o mapa não comportar todos os
+jogadores. A validação de objetivos, obstáculos e movimento permanece pendente.
 Fullscreen e áudio são autorizados por interação; quatro dicas orientadas ficam
 fora da caixa central, uma em cada lado, sem ocupar os setores. Cada setor
 ocupado tem nome/saída à esquerda e, somente na preparação, abas de token e
@@ -72,10 +76,9 @@ conectados precisam confirmar para iniciar dez segundos de retomada; desmarcar
 cancela e uma nova confirmação coletiva reinicia em dez. A simulação continua
 congelada durante essa contagem. Desconexão de cliente participante
 pausa; reconectar recupera seus setores e exige nova confirmação coletiva.
-O usuário confirmou o aceite anterior, mas relatou que tokens grandes não
-arrastavam no tablet. A causa identificada foi o círculo de toque não atualizado
-ao redimensionar a zona Phaser; a correção e os novos controles exigem reteste
-físico. Enquanto o próprio token está pressionado, todo o setor fica bloqueado,
+Após um relato de falha com tokens grandes, a zona Phaser passou a atualizar
+seu círculo de toque ao redimensionar. No reteste físico posterior, o usuário
+confirmou que o fluxo funcionou. Enquanto o próprio token está pressionado, todo o setor fica bloqueado,
 muda para a aba de jogo e mostra caminhada animada com explicação.
 Tokens e calibração mostram o nome de três letras no centro, com três
 marcadores por atributo: punho, pé em movimento e lâmpada. Nesta etapa ficam
@@ -98,26 +101,18 @@ O relato posterior de tela preta no Chrome pela LAN foi reproduzido:
 identidade da aba agora usa UUID v4 gerado com `crypto.getRandomValues()`,
 compatível com HTTP, e preserva a reconexão via `sessionStorage`. Falhas de
 armazenamento/geração mostram alerta explícito sem desmontar a interface.
-Correção publicada somente no jogo e validada no navegador; reteste físico
-da abertura permanece pendente.
+Correção publicada somente no jogo e validada no navegador; a abertura também
+foi aprovada no aceite físico posterior.
 O seletor de cores foi publicado somente no container do jogo, sem reiniciar
 servidor ou PostgreSQL. Navegador recarregado confirmou o modal de entrada com
-o botão de cor aleatória e o modal de cores, incluindo a cor atual
-destacada; a página voltou ao lobby sem confirmar entrada.
+o botão de cor aleatória e o modal de cores, incluindo a cor atual destacada.
+Depois, o usuário confirmou o aceite físico do checklist no tablet e informou
+que tudo funcionou.
 
-**Próxima etapa:** no tablet, confirmar que não fica preta e testar a seleção
-aleatória, o modal de cores, o destaque da cor atual e a rejeição de duplicatas;
-retestar a navegação de configurações sem menu “Jogo”, retorno pelo X antes
-da confirmação de saída, seu desaparecimento
-após o início, setores de 96 px, atributos compactos/responsivos,
-miniatura fixa, tokens grandes/pequenos, bloqueio de setor,
-dez contatos e o fluxo de prontidão/contagem/cancelamento/pausa/retomada. O usuário
-autorizou avançar à etapa 3 com essa limitação registrada, sem marcar o aceite
-físico como concluído. A mesa de teste estava vazia após recarregar e foi
-devolvida ao lobby sem entrada de jogador. Depois do aceite, continuar a etapa
-4 com módulos autorados, geração por seed e
-integração da geometria; objetivos alcançáveis ainda dependem das regras que
-serão definidas.
+**Próxima etapa:** testar visualmente no tablet o mapa modular recém-gerado.
+Antes de validar a alcançabilidade, definir as regras do primeiro objetivo e
+suas dependências; a exigência de força 2 para combustível continua sendo
+proposta, não decisão. Depois, iniciar movimento e visão (etapa 5).
 
 **Primeiro marco jogável:** entrada dos jogadores, calibração compartilhada,
 tokens com movimento simultâneo e obstáculos simples no tablet real.
@@ -728,7 +723,7 @@ Usar placeholders próprios ou assets com licença verificada no protótipo.
 As etapas seguem a ordem abaixo. Não considerar uma etapa concluída apenas
 porque o código compila: verificar a experiência ou regra correspondente.
 
-### 1. Base técnica — entregue; aceite no tablet pendente
+### 1. Base técnica — entregue; acesso LAN validado no tablet
 
 - [x] Workspace TypeScript com jogo, servidor, admin e contratos compartilhados.
 - [x] Docker Compose `terror`: serviços separados e admin opcional.
@@ -741,7 +736,7 @@ porque o código compila: verificar a experiência ou regra correspondente.
 verificada; dado de teste persiste após recriar o container; admin pode ser
 desligado sem interromper jogo/servidor.
 
-### 2. Mesa multitoque e calibração — implementada no cliente; aceite físico pendente
+### 2. Mesa multitoque e calibração — implementada e aceita no tablet
 
 - [x] Oito setores, entrada, seleção básica e círculo com borda de indicadores.
 - [x] Fullscreen e áudio autorizados por gesto; liberar arrasto ao cancelar
@@ -774,12 +769,12 @@ scroll/zoom involuntário nem sobreposição que impeça jogar. O usuário confi
 LAN, escala comum e arrasto de todos os tokens, mas identificou bloqueio do
 seletor e de +/− durante o arrasto. Após substituir o seletor por abas e tratar
 controles por ponteiro, Chromium/CDP validou oito tokens e dois controles
-simultâneos, troca de aba, toque sem duplicação e cancelamento. Ainda pendente:
-repetir esse cenário no tablet, incluindo os novos controles de atributos,
-nomes de três letras, cores exclusivas, duas colunas de navegação e modais internos,
-e validar fullscreen, áudio e gestos nativos.
+simultâneos, troca de aba, toque sem duplicação e cancelamento. Em 2026-11-01,
+o usuário confirmou que concluiu o checklist físico no tablet — incluindo os
+novos controles de atributos, nomes de três letras, cores, navegação, modais,
+fullscreen, áudio e dez contatos — e informou que tudo funcionou.
 
-### 3. Início, capítulo e pausa — implementada na geometria atual; aceite físico pendente
+### 3. Início, capítulo e pausa — implementada na geometria atual e aceita no tablet
 
 - [x] Prontidão, contagem central de dez segundos e cancelamento coletivo.
 - [x] Posições iniciais distintas na geometria atual, título do capítulo e
@@ -790,24 +785,28 @@ e validar fullscreen, áudio e gestos nativos.
 - [x] Configuração bloqueada após contagem, mesmo com pontos não distribuídos.
 - [x] Bloqueio central de ações pelo próprio token pressionado, animação no
   setor e atualização da área de toque ao mudar escala.
-- [ ] Aceite físico do novo fluxo e da correção dos tokens grandes.
+- [x] Aceite físico do novo fluxo e da correção dos tokens grandes.
 
 **Aceite:** posição e tempo restante das ações não mudam durante a pausa;
-reiniciar o servidor não restaura a partida anterior.
+reiniciar o servidor não restaura a partida anterior. O usuário confirmou
+fisicamente o fluxo de prontidão, contagem, cancelamento, pausa e retomada.
 
 ### 4. Tabuleiro modular
 
-- [ ] Componentes de terreno de sete hexágonos tipados, com ao menos um caminho,
+- [x] Catálogo inicial de componentes tipados de sete hexágonos, com caminhos,
   ações e células receptoras de objetos.
 - [x] Contratos Zod para sete células únicas, capacidades separadas, caminhos
   internos conectados e conectores recíprocos; rotação testada em seis passos.
-- [ ] Mapa com vários componentes, seis rotações e conectores compatíveis.
-- [ ] Geração dimensionada pela área útil e pelo multiplicador do token.
+- [x] Mapa conectado com vários componentes, rotações de 60° e conectores compatíveis.
+- [x] Geração dimensionada pela área útil e pelo multiplicador do token.
 - [ ] Validação de objetivos alcançáveis e dependências de itens/atributos.
-- [ ] Geração reproduzível por seed para diagnóstico e testes.
+- [x] Geração reproduzível por seed para diagnóstico e testes.
 
 **Aceite:** testar rotações e conjuntos de seeds/tamanhos; não iniciar mapas
 inválidos; comunicar claramente quando a tela/escala não comportar a partida.
+Testes automatizados cobrem reprodutibilidade, encaixe, capacidade e rejeição
+de mapa pequeno. O aceite visual no tablet e a alcançabilidade dos objetivos
+continuam pendentes; esta última depende das regras ainda não decididas.
 
 ### 5. Movimento e visão
 
@@ -920,6 +919,7 @@ sem duplicar controladores ou expor informações ocultas.
 | 2026-11-01 | Entrada com 16 cores de token de alto contraste, escolha aleatória inicial, seletor/modal reutilizável e exclusividade validada pelo servidor; token e miniatura recebem a cor escolhida. Base da etapa 4: schemas Zod para módulos de sete células, capacidades independentes, caminhos conectados, conectores recíprocos e seis rotações. | `npm run typecheck`, `npm test` (16 contratos + 11 servidor + 5 jogo), `npm run build` e integração API/Socket.IO no PostgreSQL isolado passaram; serviço de teste parado/removido. A página compartilhada indicou que outro cliente configura a mesa; não publiquei nem alterei essa sessão. Seletor, cores no tablet e multitoque ainda precisam de aceite físico. Módulos autorados, geração do mapa, integração e validação de objetivos continuam pendentes. |
 | 2026-11-01 | Corrigida ausência do seletor no endereço LAN: a página ainda servia o bundle anterior. Publicada a build atual somente no container `game`; ajustado o modal da paleta para renderizar diretamente na área do setor e não ser recortado pelo modal do nome. | Build do jogo passou; container `game` saudável após `docker compose up --build -d --no-deps game`; servidor e PostgreSQL permaneceram sem reinício. Navegador em `http://192.168.68.108:8080` confirmou seleção aleatória no modal de nome, abertura da paleta com 16 cores e indicação da cor atual; ambos diálogos fechados sem entrar com jogador. Aceite no tablet continua pendente. |
 | 2026-11-01 | Substituída a paleta por exatamente 13 cores nomeadas conforme pedido: vermelho, azul, verde, amarelo, roxo, rosa, preto, cinza, branco, laranja, marrom, verde escuro e azul escuro. | `npm run typecheck`, `npm test` (16 contratos + 11 servidor + 5 jogo), `npm run build -w @terror/game` e `git diff --check` passaram. Publicados `game` e `server` separadamente com `--no-deps`, sem tocar no PostgreSQL; antes de recriar o servidor, API confirmou lobby vazio. Após publicação, os containers `game`, `server` e `postgres` ficaram saudáveis, `/api/health` respondeu pronto e `/api/match` retornou lobby vazio. Navegador confirmou as 13 opções, amarelo selecionado inicialmente, clique em azul atualizando o botão e fechando a paleta; modal fechado sem entrar. Aceite físico no tablet segue pendente. |
+| 2026-11-01 | Usuário confirmou que o checklist físico de entrada, cores, controles, pausa/retomada e dez contatos simultâneos funcionou no tablet. Etapa 4: catálogo com clareira, cabana e bosque; geração conectada por seed, encaixes recíprocos, rotação de 60°, dimensionamento pela área útil/escala, rejeição de capacidade insuficiente e desenho dos terrenos no tabuleiro. O snapshot envia apenas a seed para reconstrução determinística nos clientes. | `npm test` passou (17 contratos, 12 testes do servidor e 5 do jogo); `npm run typecheck`, `npm run build` e `git diff --check` passaram. Testes cobrem repetibilidade da seed, módulos/células sem sobreposição, rotações, ajuste pela escala e rejeição de tela pequena. A arena máxima suportada (7680×7680, escala 0,5) gerou 5615 módulos em ~288 ms no ambiente atual. Ainda não foi feito o aceite visual do mapa no tablet; validação de objetivos aguarda regras confirmadas. |
 
 Adicionar novas linhas com entregas reais e evidências de validação. Não listar
 como concluídos comportamentos ainda apenas planejados.

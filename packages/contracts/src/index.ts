@@ -4,8 +4,9 @@ import { playerColorSchema } from "./playerColors.js";
 export { parseApiResponse } from "./http.js";
 export { boardArea, cellDimensions, hexCorners, playerSectorDepth, terrainLayout, tokenHitCircle, initialTokenPosition } from "./layout.js";
 export {
-  hexDirections, rotateTerrainModule, terrainModuleCellSchema, terrainModuleCatalogSchema,
-  terrainModuleSchema, terrainModulesConnect, type TerrainModule, type TerrainModuleCell,
+  generateTerrainMap, generatedTerrainMapSchema, hexDirections, rotateTerrainModule,
+  STARTER_TERRAIN_MODULES, terrainMapCells, terrainModuleCellSchema, terrainModuleCatalogSchema,
+  terrainModuleSchema, terrainModulesConnect, type GeneratedTerrainMap, type TerrainModule, type TerrainModuleCell,
 } from "./terrain.js";
 export { PLAYER_COLOR_IDS, PLAYER_COLORS, playerColorSchema, type PlayerColor } from "./playerColors.js";
 export { enterPreparationPlayer, leavePreparationPlayer, changePreparationAttribute, rotatePlayerName, playerNameSchema, type PreparationState } from "./preparation.js";
@@ -103,6 +104,7 @@ export const matchSnapshotSchema = z.strictObject({
   chapter: z.string(),
   error: z.string(),
   controlSlots: z.array(z.number().int().min(0).max(7)).max(8),
+  terrainSeed: z.string().min(1).max(128).nullable(),
 });
 
 const slot = z.number().int().min(0).max(7);

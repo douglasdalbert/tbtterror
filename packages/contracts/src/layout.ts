@@ -81,20 +81,23 @@ export function terrainLayout(width: number, height: number, scale: number) {
   const placements: TerrainPlacement[] = [];
   const rLimit = Math.ceil(area.height / (3 * dimensions.radius)) + 2;
   const qLimit = Math.ceil(area.width / (2 * dimensions.width) + rLimit / 2) + 2;
+  const moduleHalfWidth = dimensions.width + dimensions.radius * Math.cos(Math.PI / 6);
+  const moduleHalfHeight = dimensions.radius * 2.5;
   if (area.width > 0 && area.height > 0) {
     for (let r = -rLimit; r <= rLimit; r++) {
       for (let q = -qLimit; q <= qLimit; q++) {
         // Index-7 axial lattice tiles radius-one modules without shared cells.
         if ((3 * q + r) % 7 !== 0) continue;
+        const center = toPixel({ q, r });
+        if (center.x - moduleHalfWidth < area.x - 1e-7
+          || center.x + moduleHalfWidth > area.x + area.width + 1e-7
+          || center.y - moduleHalfHeight < area.y - 1e-7
+          || center.y + moduleHalfHeight > area.y + area.height + 1e-7) continue;
         const cells = offsets.map((offset) => {
           const axial = { q: q + offset.q, r: r + offset.r };
           return { ...axial, ...toPixel(axial) };
         });
-        const fits = cells.every((cell) => hexCorners(cell, dimensions.radius).every((point) =>
-          point.x >= area.x - 1e-7 && point.x <= area.x + area.width + 1e-7
-          && point.y >= area.y - 1e-7 && point.y <= area.y + area.height + 1e-7,
-        ));
-        if (fits) placements.push({ center: toPixel({ q, r }), cells });
+        placements.push({ center, cells });
       }
     }
   }

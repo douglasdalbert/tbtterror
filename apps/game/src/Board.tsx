@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
 import Phaser from "phaser";
 import {
-  boardArea, hexCorners, terrainLayout, tokenHitCircle, initialTokenPosition, PLAYER_COLORS,
-  type Catalog, type MatchSnapshot, type MatchCommand, type PlayerColor,
+  boardArea, generateTerrainMap, hexCorners, terrainLayout, terrainMapCells, tokenHitCircle, initialTokenPosition,
+  PLAYER_COLORS, STARTER_TERRAIN_MODULES,
+  type Catalog, type GeneratedTerrainMap, type MatchSnapshot, type MatchCommand, type PlayerColor,
 } from "@terror/contracts";
 import { tokenMarkerPositions, tokenMarkerShapes } from "./TokenVisual.js";
 
@@ -42,6 +43,7 @@ class TerrainPreviewScene extends Phaser.Scene {
   #markers = new Map<number, Phaser.GameObjects.Image[]>();
   #dragging = new Map<number, { slot: number; offsetX: number; offsetY: number }>();
   #snapshot: MatchSnapshot | undefined;
+  #terrainMap: GeneratedTerrainMap | undefined;
   #interaction: BoardInteraction | undefined;
   #lastMove = new Map<number, number>();
 
@@ -95,16 +97,27 @@ class TerrainPreviewScene extends Phaser.Scene {
       || this.#snapshot.arena.width !== snapshot.arena.width
       || this.#snapshot.arena.height !== snapshot.arena.height
       || this.#snapshot.arena.scale !== snapshot.arena.scale;
+    const terrainChanged = this.#snapshot?.terrainSeed !== snapshot.terrainSeed;
     if (this.#snapshot && (this.#snapshot.arena.scale !== snapshot.arena.scale
       || this.#snapshot.phase !== snapshot.phase || geometryChanged)) this.cancelDrags();
     this.#snapshot = snapshot;
+    if (terrainChanged) {
+      this.#terrainMap = snapshot.terrainSeed
+        ? generateTerrainMap(
+          snapshot.arena.width,
+          snapshot.arena.height,
+          snapshot.arena.scale,
+          snapshot.terrainSeed,
+        )
+        : undefined;
+    }
     this.#scale = snapshot.arena.scale;
     this.#players = snapshot.players;
     const dragging = new Set([...this.#dragging.values()].map((d) => d.slot));
     for (const player of snapshot.players) {
       if (!dragging.has(player.slot)) this.#positions.set(player.slot, player.position);
     }
-    this.drawBoard(geometryChanged);
+    this.drawBoard(geometryChanged || terrainChanged);
   }
 
   moveToken(pointer: Phaser.Input.Pointer) {
@@ -166,14 +179,33 @@ class TerrainPreviewScene extends Phaser.Scene {
       graphics.clear();
       graphics.lineStyle(1, 0x718198, 0.3);
       graphics.strokeRect(layout.area.x, layout.area.y, layout.area.width, layout.area.height);
-      layout.placements.forEach((terrain, index) => {
-        graphics.fillStyle(index % 2 ? 0x293345 : 0x202a38, 0.75);
-        graphics.lineStyle(Math.max(1, this.#scale), 0x64758b, 0.65);
-        for (const cell of terrain.cells) {
-          graphics.fillPoints(hexCorners(cell, layout.radius), true);
-          graphics.strokePoints(hexCorners(cell, layout.radius), true);
+      if (this.#terrainMap && this.#snapshot) {
+        const colors: Record<string, number> = {
+          path: 0x293345,
+          clearing: 0x3c5044,
+          room: 0x51483c,
+        };
+        const terrainCells = terrainMapCells(this.#terrainMap, STARTER_TERRAIN_MODULES);
+        for (const cell of terrainCells) {
+          const center = {
+            x: this.#snapshot.arena.width / 2 + layout.width * (cell.q + cell.r / 2),
+            y: this.#snapshot.arena.height / 2 + layout.radius * 1.5 * cell.r,
+          };
+          graphics.fillStyle(colors[cell.terrainType] ?? 0x293345, 0.85);
+          graphics.lineStyle(Math.max(1, this.#scale), 0x64758b, 0.65);
+          graphics.fillPoints(hexCorners(center, layout.radius), true);
+          graphics.strokePoints(hexCorners(center, layout.radius), true);
         }
-      });
+      } else {
+        layout.placements.forEach((terrain, index) => {
+          graphics.fillStyle(index % 2 ? 0x293345 : 0x202a38, 0.75);
+          graphics.lineStyle(Math.max(1, this.#scale), 0x64758b, 0.65);
+          for (const cell of terrain.cells) {
+            graphics.fillPoints(hexCorners(cell, layout.radius), true);
+            graphics.strokePoints(hexCorners(cell, layout.radius), true);
+          }
+        });
+      }
     }
     tokenGraphics.clear();
 
@@ -221,8 +253,8 @@ class TerrainPreviewScene extends Phaser.Scene {
 
     if (updateSummary) {
       this.game.events.emit("preview:layout", {
-        terrains: layout.placements.length,
-        cells: layout.placements.length * 7,
+        terrains: this.#terrainMap?.modules.length ?? layout.placements.length,
+        cells: (this.#terrainMap?.modules.length ?? layout.placements.length) * 7,
         cellWidth: layout.width,
         tokenDiameter: layout.tokenDiameter,
       } satisfies LayoutSummary);
