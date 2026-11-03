@@ -75,7 +75,7 @@ test("readiness starts exactly ten seconds, cancels globally and restarts from t
   assert.equal(match.snapshot().phase, "countdown");
   advance(1);
   assert.equal(match.snapshot().phase, "chapter");
-  assert.equal(match.snapshot().simulationMs, 0);
+  assert.equal(match.snapshot().simulationTurns, 0);
   const layout = terrainLayout(1920, 1200, 1);
   const positions = match.snapshot().players.map((p) => p.position);
   assert.notDeepEqual(positions[0], positions[1]);
@@ -89,7 +89,7 @@ test("readiness starts exactly ten seconds, cancels globally and restarts from t
   command({ type: "move", slot: 0, position: { x: -500, y: 90000 } });
   command({ type: "release", slot: 0 });
   const afterMove = match.snapshot().players[0]!.position;
-  assert.ok(Math.hypot(afterMove.x - beforeMove.x, afterMove.y - beforeMove.y) <= layout.width * 0.125 + 0.01);
+  assert.ok(Math.hypot(afterMove.x - beforeMove.x, afterMove.y - beforeMove.y) <= layout.width * 0.1375 + 0.01);
   assert.ok(afterMove.x >= layout.area.x && afterMove.x <= layout.area.x + layout.area.width);
   assert.ok(afterMove.y >= layout.area.y && afterMove.y <= layout.area.y + layout.area.height);
 });
@@ -148,10 +148,10 @@ test("pause freezes positions, simulation and chapter timer until every connecte
   assert.equal(match.snapshot().remainingMs, 1500);
   advance(1500);
   advance(1000);
-  assert.equal(match.snapshot().simulationMs, 1000);
+  assert.equal(match.snapshot().simulationTurns, 1);
   command({ type: "pause", slot: 1 });
   advance(30000);
-  assert.equal(match.snapshot().simulationMs, 1000);
+  assert.equal(match.snapshot().simulationTurns, 1);
   assert.equal(match.command("tablet", { type: "move", slot: 0, position: { x: 10, y: 10 } }).ok, false);
 });
 
@@ -169,9 +169,9 @@ test("disconnect pauses only participating clients, reconnection restores owners
   assert.equal(match.snapshot().phase, "paused");
   assert.equal(match.snapshot().players[0]?.pressed, false);
   assert.equal(match.snapshot().players[0]?.connected, false);
-  const frozen = match.snapshot().simulationMs;
+  const frozen = match.snapshot().simulationTurns;
   advance(20000);
-  assert.equal(match.snapshot().simulationMs, frozen);
+  assert.equal(match.snapshot().simulationTurns, frozen);
   match.connect("other");
   assert.equal(match.command("other", { type: "resume", slot: 0, value: true }).ok, false);
   match.connect("tablet");
@@ -184,7 +184,7 @@ test("disconnect pauses only participating clients, reconnection restores owners
   command({ type: "leave", slot: 0 });
   assert.equal(match.snapshot().phase, "lobby");
   assert.equal(match.snapshot().players.length, 0);
-  assert.equal(match.snapshot().simulationMs, 0);
+  assert.equal(match.snapshot().simulationTurns, 0);
 });
 
 test("resume countdown cancels and restarts at ten without advancing the paused world", () => {
@@ -215,15 +215,15 @@ test("resume countdown cancels and restarts at ten without advancing the paused 
   advance(9999);
   assert.equal(match.snapshot().phase, "paused");
   assert.equal(match.snapshot().resumeRemainingMs, 1);
-  assert.equal(match.snapshot().simulationMs, frozen.simulationMs);
+  assert.equal(match.snapshot().simulationTurns, frozen.simulationTurns);
   assert.deepEqual(match.snapshot().players.map((p) => p.position), frozen.players.map((p) => p.position));
   assert.equal(match.command("tablet", { type: "press", slot: 0 }).ok, false);
   advance(1);
   assert.equal(match.snapshot().phase, "running");
-  assert.equal(match.snapshot().simulationMs, frozen.simulationMs);
+  assert.equal(match.snapshot().simulationTurns, frozen.simulationTurns);
   assert.ok(match.snapshot().players.every((p) => !p.resumeReady));
   advance(100);
-  assert.equal(match.snapshot().simulationMs, frozen.simulationMs + 100);
+  assert.equal(match.snapshot().simulationTurns, frozen.simulationTurns + 0.1);
 });
 
 test("disconnect and confirmed exit cancel an in-progress resume countdown", () => {
@@ -295,22 +295,41 @@ test("configuration rejects missing or example secrets without exposing them", (
   });
   assert.equal(config.PORT, 3000);
   assert.equal(config.PLAYER_VISION_RADIUS_CELLS, 3);
-  assert.equal(config.BASE_MOVEMENT_CELLS_PER_SECOND, 0.5);
+  assert.equal(config.TURN_DURATION_MS, 1000);
+  assert.equal(config.BASE_MOVEMENT_CELLS_PER_TURN, 0.5);
   assert.equal(readConfig({
     POSTGRES_PASSWORD: "b".repeat(32),
     PLAYER_VISION_RADIUS_CELLS: "5",
   }).PLAYER_VISION_RADIUS_CELLS, 5);
   assert.equal(readConfig({
     POSTGRES_PASSWORD: "b".repeat(32),
+    BASE_MOVEMENT_CELLS_PER_TURN: "0.75",
+  }).BASE_MOVEMENT_CELLS_PER_TURN, 0.75);
+  assert.equal(readConfig({
+    POSTGRES_PASSWORD: "b".repeat(32),
+    TURN_DURATION_MS: "2000",
+  }).TURN_DURATION_MS, 2000);
+  assert.equal(readConfig({
+    POSTGRES_PASSWORD: "b".repeat(32),
+    TURN_DURATION_MS: "2000",
     BASE_MOVEMENT_CELLS_PER_SECOND: "0.75",
-  }).BASE_MOVEMENT_CELLS_PER_SECOND, 0.75);
+  }).BASE_MOVEMENT_CELLS_PER_TURN, 1.5);
+  assert.equal(readConfig({
+    POSTGRES_PASSWORD: "b".repeat(32),
+    BASE_MOVEMENT_CELLS_PER_TURN: "0.25",
+    BASE_MOVEMENT_CELLS_PER_SECOND: "0.75",
+  }).BASE_MOVEMENT_CELLS_PER_TURN, 0.25);
   assert.throws(() => readConfig({
     POSTGRES_PASSWORD: "b".repeat(32),
     PLAYER_VISION_RADIUS_CELLS: "0",
   }), /Invalid server configuration/);
   assert.throws(() => readConfig({
     POSTGRES_PASSWORD: "b".repeat(32),
-    BASE_MOVEMENT_CELLS_PER_SECOND: "0",
+    BASE_MOVEMENT_CELLS_PER_TURN: "0",
+  }), /Invalid server configuration/);
+  assert.throws(() => readConfig({
+    POSTGRES_PASSWORD: "b".repeat(32),
+    TURN_DURATION_MS: "99",
   }), /Invalid server configuration/);
 });
 
@@ -333,12 +352,41 @@ test("vision radius is validated and included in snapshots", () => {
 test("configured movement speed is validated and included in snapshots", () => {
   const config = readConfig({
     POSTGRES_PASSWORD: "b".repeat(32),
-    BASE_MOVEMENT_CELLS_PER_SECOND: "0.75",
+    BASE_MOVEMENT_CELLS_PER_TURN: "0.75",
+    TURN_DURATION_MS: "2000",
   });
-  assert.equal(
-    new Match(catalog, undefined, 3, config.BASE_MOVEMENT_CELLS_PER_SECOND)
-      .snapshot().baseMovementCellsPerSecond,
-    0.75,
-  );
+  const snapshot = new Match(
+    catalog, undefined, 3,
+    config.BASE_MOVEMENT_CELLS_PER_TURN,
+    config.TURN_DURATION_MS,
+  ).snapshot();
+  assert.equal(snapshot.baseMovementCellsPerTurn, 0.75);
+  assert.equal(snapshot.turnDurationMs, 2000);
   assert.throws(() => new Match(catalog, undefined, 3, 0));
+});
+
+test("movement is measured using the configured turn duration", () => {
+  const movementAfter = (turnDurationMs: number) => {
+    let time = 0;
+    const match = new Match(catalog, () => time, 3, 1, turnDurationMs);
+    match.connect("tablet");
+    const command = (value: MatchCommand) => assert.deepEqual(
+      match.command("tablet", value),
+      { ok: true },
+    );
+    command({ type: "join", slot: 0, name: "AAA", color: "red" });
+    command({ type: "ready", slot: 0, value: true });
+    time += 10000;
+    match.tick();
+    time += 2000;
+    match.tick();
+    command({ type: "press", slot: 0 });
+    time += 100;
+    const before = match.snapshot().players[0]!.position;
+    command({ type: "move", slot: 0, position: { x: before.x + 40, y: before.y } });
+    const after = match.snapshot().players[0]!.position;
+    return Math.hypot(after.x - before.x, after.y - before.y);
+  };
+  assert.ok(Math.abs(movementAfter(1000) - 8) < 0.01);
+  assert.ok(Math.abs(movementAfter(2000) - 4) < 0.01);
 });

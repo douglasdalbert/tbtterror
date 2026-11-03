@@ -1,15 +1,17 @@
 import { z } from "zod";
 import { playerColorSchema } from "./playerColors.js";
-import { movementSpeedSchema } from "./terrain.js";
+import { movementSpeedSchema, turnDurationSchema } from "./terrain.js";
 
 export { parseApiResponse } from "./http.js";
 export { boardArea, cellDimensions, hexCorners, playerSectorDepth, terrainLayout, tokenHitCircle, initialTokenPosition } from "./layout.js";
 export {
-  BASE_MOVEMENT_CELLS_PER_SECOND, movementSpeedSchema,
+  BASE_MOVEMENT_CELLS_PER_TURN, DEFAULT_TURN_DURATION_MS, movementSpeedSchema, turnDurationSchema,
   generateTerrainMap, generatedTerrainMapSchema, hexDirections,
   moveWithinTerrain, movementMultiplier, rotateTerrainModule, visibleTerrainCellIndices,
+  terrainGateSchema,
   STARTER_TERRAIN_MODULES, terrainMapCells, terrainModuleCellSchema, terrainModuleCatalogSchema,
   terrainModuleSchema, terrainModulesConnect, type GeneratedTerrainMap, type TerrainModule, type TerrainModuleCell,
+  type TerrainGate, type DoorState,
 } from "./terrain.js";
 export { PLAYER_COLOR_IDS, PLAYER_COLORS, playerColorSchema, type PlayerColor } from "./playerColors.js";
 export { enterPreparationPlayer, leavePreparationPlayer, changePreparationAttribute, rotatePlayerName, playerNameSchema, type PreparationState } from "./preparation.js";
@@ -88,6 +90,16 @@ export const exploredTerrainCellSchema = z.strictObject({
   q: z.number().int(),
   r: z.number().int(),
   terrainType: z.string().regex(/^[a-z][a-z0-9_-]*$/),
+  objectSlots: z.array(z.string().regex(/^[a-z][a-z0-9_-]*$/)).default([]),
+  gates: z.array(z.discriminatedUnion("kind", [
+    z.strictObject({ direction: z.number().int().min(0).max(5), kind: z.literal("wall") }),
+    z.strictObject({ direction: z.number().int().min(0).max(5), kind: z.literal("window") }),
+    z.strictObject({
+      direction: z.number().int().min(0).max(5),
+      kind: z.literal("door"),
+      state: z.enum(["open", "closed"]),
+    }),
+  ])).default([]),
 });
 const terrainCellKeySchema = z.string().regex(/^-?\d+,-?\d+$/);
 export const playerVisionRadiusSchema = z.number().int().min(1).max(12);
@@ -118,12 +130,13 @@ export const matchSnapshotSchema = z.strictObject({
   arena: arenaSchema,
   remainingMs: z.number().nonnegative(),
   resumeRemainingMs: z.number().nonnegative().max(10000),
-  simulationMs: z.number().nonnegative(),
+  simulationTurns: z.number().nonnegative().finite(),
   chapter: z.string(),
   error: z.string(),
   controlSlots: z.array(z.number().int().min(0).max(7)).max(8),
   visionRadiusCells: playerVisionRadiusSchema,
-  baseMovementCellsPerSecond: movementSpeedSchema,
+  turnDurationMs: turnDurationSchema,
+  baseMovementCellsPerTurn: movementSpeedSchema,
   exploredTerrainCells: z.array(exploredTerrainCellSchema).max(60000),
   visibleTerrainCellKeys: z.array(terrainCellKeySchema).max(60000),
 });

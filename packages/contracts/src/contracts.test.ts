@@ -4,11 +4,13 @@ import {
   allocateAttributePoint, attributesSchema, availableAttributePoints, initialPlayerAttributes,
   PLAYER_COLORS, PLAYER_COLOR_IDS, playerColorSchema,
   generateTerrainMap, generatedTerrainMapSchema, STARTER_TERRAIN_MODULES, terrainMapCells,
-  BASE_MOVEMENT_CELLS_PER_SECOND, movementMultiplier, movementSpeedSchema,
+  BASE_MOVEMENT_CELLS_PER_TURN, DEFAULT_TURN_DURATION_MS, movementMultiplier,
+  movementSpeedSchema, turnDurationSchema,
   moveWithinTerrain, visibleTerrainCellIndices,
   matchSnapshotSchema, parseApiResponse, playerAttributesSchema, settingsSchema,
   enterPreparationPlayer, leavePreparationPlayer, changePreparationAttribute, rotatePlayerName, type PreparationState,
-  rotateTerrainModule, terrainModuleCatalogSchema, terrainModuleSchema, terrainModulesConnect, type TerrainModule,
+  rotateTerrainModule, terrainModuleCatalogSchema, terrainModuleSchema, terrainModulesConnect,
+  type TerrainModule, type TerrainModuleCell,
 } from "./index.js";
 import { boardArea, cellDimensions, hexCorners, terrainLayout, tokenHitCircle } from "./layout.js";
 import { hexDirections } from "./terrain.js";
@@ -25,6 +27,7 @@ function terrainModule(): TerrainModule {
       actions: q === 0 && r === 0 ? ["inspect"] : [],
       objectSlots: q === 1 && r === 0 ? ["item"] : [],
       connectors: Array(6).fill("path"),
+      gates: Array(6).fill(null),
     })),
   };
 }
@@ -152,6 +155,10 @@ test("terrain modules validate seven unique cells, separate capabilities and con
   assert.equal(terrainModuleSchema.safeParse({
     ...module,
     cells: module.cells.map((cell) => ({ ...cell, terrainType: "ground" })),
+  }).success, true);
+  assert.equal(terrainModuleSchema.safeParse({
+    ...module,
+    cells: module.cells.map((cell) => ({ ...cell, terrainType: "Invalid Type" })),
   }).success, false);
   assert.equal(terrainModuleSchema.safeParse({
     ...module,
@@ -183,6 +190,61 @@ test("terrain module rotations preserve cell capabilities and rotate connectors 
   }
   assert.deepEqual(rotateTerrainModule(rotated[1]!, 5), module);
   assert.throws(() => rotateTerrainModule(module, 6));
+});
+
+test("the abandoned house has one lost-item slot, one door, one window and otherwise solid walls", () => {
+  const house = STARTER_TERRAIN_MODULES.find(({ id }) => id === "abandoned-house");
+  assert.ok(house);
+  assert.equal(terrainModuleSchema.safeParse(house).success, true);
+  assert.equal(house.cells.filter(({ objectSlots }) => objectSlots.includes("lost-item")).length, 1);
+  assert.deepEqual(
+    house.cells.filter(({ objectSlots }) => objectSlots.includes("lost-item"))
+      .map(({ q, r }) => ({ q, r })),
+    [{ q: 0, r: 0 }],
+  );
+  assert.deepEqual(
+    ["door", "window", "wall"].map((kind) =>
+      house.cells.flatMap(({ gates }) => gates).filter((gate) => gate === kind).length),
+    [1, 1, 16],
+  );
+  const doorCell = house.cells.find(({ gates }) => gates.includes("door"));
+  const windowCell = house.cells.find(({ gates }) => gates.includes("window"));
+  assert.ok(doorCell);
+  assert.ok(windowCell);
+  assert.notDeepEqual(
+    { q: doorCell.q, r: doorCell.r },
+    { q: 0, r: 0 },
+  );
+  assert.notDeepEqual(
+    { q: windowCell.q, r: windowCell.r },
+    { q: 0, r: 0 },
+  );
+  for (let steps = 0; steps < 6; steps++) {
+    const rotated = rotateTerrainModule(house, steps);
+    const rotatedDoor = rotated.cells.find(({ gates }) => gates.includes("door"));
+    const rotatedWindow = rotated.cells.find(({ gates }) => gates.includes("window"));
+    let expectedQ: number = doorCell.q;
+    let expectedR: number = doorCell.r;
+    for (let turn = 0; turn < steps; turn++) {
+      const nextQ = -expectedR;
+      const nextR = expectedQ + expectedR;
+      expectedQ = nextQ === 0 ? 0 : nextQ;
+      expectedR = nextR === 0 ? 0 : nextR;
+    }
+    assert.deepEqual({ q: rotatedDoor?.q, r: rotatedDoor?.r }, { q: expectedQ, r: expectedR });
+    assert.equal(rotatedDoor?.gates.indexOf("door"), steps);
+    assert.equal(rotatedWindow?.gates.indexOf("window"), (3 + steps) % 6);
+  }
+  const missingWall = {
+    ...house,
+    cells: house.cells.map((cell) => {
+      const direction = cell.gates.indexOf("wall");
+      return direction < 0
+        ? cell
+        : { ...cell, gates: cell.gates.map((gate, index) => index === direction ? null : gate) };
+    }),
+  };
+  assert.equal(terrainModuleSchema.safeParse(missingWall).success, false);
 });
 
 test("terrain modules only connect through matching reciprocal boundary connectors", () => {
@@ -218,6 +280,14 @@ test("seeded terrain generation fits whole connected modules and expands to uniq
   assert.notDeepEqual(first, other);
   assert.equal(first.modules[0]?.id, "clearing");
   assert.ok(first.modules.length > 1);
+  assert.equal(first.modules.filter(({ id }) => id === "abandoned-house").length, 1);
+  assert.deepEqual(first.modules.slice(0, 3).map(({ id }) => id), [
+    "clearing", "path-connector", "abandoned-house",
+  ]);
+  assert.equal(first.doorStates.length, 1);
+  assert.ok(["open", "closed"].includes(first.doorStates[0]!.state));
+  assert.deepEqual(first.doorStates, repeated.doorStates);
+  assert.notDeepEqual(first.doorStates, other.doorStates);
   assert.equal(generatedTerrainMapSchema.safeParse(first).success, true);
   assert.equal(new Set(first.modules.map(({ rotation }) => rotation)).size > 1, true);
   assert.equal(new Set(first.modules.map(({ id }) => id)).size > 1, true);
@@ -225,6 +295,7 @@ test("seeded terrain generation fits whole connected modules and expands to uniq
   assert.equal(cells.length, first.modules.length * 7);
   assert.equal(new Set(cells.map(({ q, r }) => `${q},${r}`)).size, cells.length);
   assert.ok(cells.filter(({ traversable }) => traversable).length >= first.modules.length * 6);
+  assert.equal(cells.filter(({ objectSlots }) => objectSlots.includes("lost-item")).length, 1);
   assert.equal(terrainMapCells(generateTerrainMap(320, 320, 2, "too-small")).length, 0);
   assert.ok(
     generateTerrainMap(1920, 1200, 2, "map-seed").modules.length < first.modules.length,
@@ -232,7 +303,7 @@ test("seeded terrain generation fits whole connected modules and expands to uniq
   const maximumArena = generateTerrainMap(7680, 7680, 0.5, "maximum-arena");
   assert.ok(maximumArena.modules.length > 0);
   assert.ok(maximumArena.modules.length <= 8000);
-  assert.equal(STARTER_TERRAIN_MODULES.length, 4);
+  assert.equal(STARTER_TERRAIN_MODULES.length, 6);
   assert.equal(generatedTerrainMapSchema.safeParse({
     seed: "overlap",
     modules: [
@@ -269,6 +340,26 @@ test("movement speed scales with dexterity and collision checks enforce terrain 
   }));
   const connectorBlocked = moveWithinTerrain(connectorBlockedCells, start, target, 200, 1920, 1200, 1);
   assert.ok(connectorBlocked.x < start.x + cellDimensions(1).width / 2);
+
+  const gatedCells = module.cells.map((cell) => cell.q === 0 && cell.r === 0
+    ? { ...cell, gates: ["door", null, null, null, null, null] as TerrainModuleCell["gates"] }
+    : cell);
+  const gatedTarget = { x: start.x + cellDimensions(1).width, y: start.y };
+  const closedDoor = moveWithinTerrain(
+    gatedCells, start, gatedTarget, 200, 1920, 1200, 1, new Set(["0,0,0"]),
+  );
+  const openDoor = moveWithinTerrain(gatedCells, start, gatedTarget, 200, 1920, 1200, 1);
+  assert.ok(closedDoor.x < start.x + cellDimensions(1).width / 2);
+  assert.ok(openDoor.x >= gatedTarget.x - 0.01);
+  for (const kind of ["wall", "window"] as const) {
+    const impassableCell = gatedCells.map((cell) => cell.q === 0 && cell.r === 0
+      ? { ...cell, gates: [kind, null, null, null, null, null] as TerrainModuleCell["gates"] }
+      : cell);
+    const impassable = moveWithinTerrain(
+      impassableCell, start, gatedTarget, 200, 1920, 1200, 1, new Set(["0,0,0"]),
+    );
+    assert.ok(impassable.x < start.x + cellDimensions(1).width / 2);
+  }
 });
 
 test("vision includes hex cells in range and unions every player's view", () => {
@@ -283,18 +374,23 @@ test("vision includes hex cells in range and unions every player's view", () => 
 });
 
 test("lobby snapshots cannot accidentally include hidden world data", () => {
-  assert.equal(BASE_MOVEMENT_CELLS_PER_SECOND, 0.5);
+  assert.equal(BASE_MOVEMENT_CELLS_PER_TURN, 0.5);
+  assert.equal(DEFAULT_TURN_DURATION_MS, 1000);
   assert.equal(movementSpeedSchema.safeParse(0.75).success, true);
   assert.equal(movementSpeedSchema.safeParse(0).success, false);
   assert.equal(movementSpeedSchema.safeParse(Infinity).success, false);
+  assert.equal(turnDurationSchema.safeParse(1000).success, true);
+  assert.equal(turnDurationSchema.safeParse(99).success, false);
+  assert.equal(turnDurationSchema.safeParse(60001).success, false);
   const snapshot = {
     id: "8312cb65-50ae-4fb6-879c-071b1861bd22",
     phase: "lobby",
     catalogRevision: 1,
     players: [], arena: { width: 1920, height: 1200, scale: 1 },
-    remainingMs: 0, resumeRemainingMs: 0, simulationMs: 0, chapter: "", error: "", controlSlots: [],
+    remainingMs: 0, resumeRemainingMs: 0, simulationTurns: 0, chapter: "", error: "", controlSlots: [],
     visionRadiusCells: 3,
-    baseMovementCellsPerSecond: BASE_MOVEMENT_CELLS_PER_SECOND,
+    turnDurationMs: DEFAULT_TURN_DURATION_MS,
+    baseMovementCellsPerTurn: BASE_MOVEMENT_CELLS_PER_TURN,
     exploredTerrainCells: [],
     visibleTerrainCellKeys: [],
   };

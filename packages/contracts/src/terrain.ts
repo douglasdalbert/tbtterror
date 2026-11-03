@@ -17,6 +17,9 @@ const moduleCoordinates = [
 
 const identifierSchema = z.string().regex(/^[a-z][a-z0-9_-]*$/);
 const connectorSchema = identifierSchema.nullable();
+export const terrainGateSchema = z.enum(["wall", "door", "window"]);
+const gateSchema = terrainGateSchema.nullable();
+const doorStateSchema = z.enum(["open", "closed"]);
 
 export const terrainModuleCellSchema = z.strictObject({
   q: z.number().int(),
@@ -26,12 +29,10 @@ export const terrainModuleCellSchema = z.strictObject({
   actions: z.array(identifierSchema),
   objectSlots: z.array(identifierSchema),
   connectors: z.array(connectorSchema).length(6),
+  gates: z.array(gateSchema).length(6).default(Array(6).fill(null)),
 }).superRefine((cell, context) => {
   if (cell.terrainType === "path" && !cell.traversable) {
     context.addIssue({ code: "custom", message: "Uma célula de caminho precisa ser transitável." });
-  }
-  if (cell.connectors.some((connector) => connector !== null) && !cell.traversable) {
-    context.addIssue({ code: "custom", message: "Conectores só podem existir em células transitáveis." });
   }
   if (new Set(cell.actions).size !== cell.actions.length) {
     context.addIssue({ code: "custom", message: "Uma célula não pode repetir ações." });
@@ -67,9 +68,9 @@ export const terrainModuleSchema = z.strictObject({
   }
   if (cells.size !== 7) return;
 
-  const paths = module.cells.filter((cell) => cell.terrainType === "path" && cell.traversable);
+  const paths = module.cells.filter((cell) => cell.traversable);
   if (paths.length === 0) {
-    context.addIssue({ code: "custom", path: ["cells"], message: "O módulo precisa conter ao menos um caminho." });
+    context.addIssue({ code: "custom", path: ["cells"], message: "O módulo precisa conter ao menos uma célula transitável." });
   }
 
   for (const cell of module.cells) {
@@ -84,6 +85,43 @@ export const terrainModuleSchema = z.strictObject({
           message: "Conectores entre células do módulo precisam ser recíprocos.",
         });
       }
+      if (cell.gates[direction] !== null || neighbor.gates[(direction + 3) % 6] !== null) {
+        context.addIssue({
+          code: "custom",
+          path: ["cells"],
+          message: "Portas, janelas e paredes só podem ocupar bordas externas do módulo.",
+        });
+      }
+    }
+  }
+
+  if (module.id === "abandoned-house") {
+    const lostItemCells = module.cells.filter((cell) => cell.objectSlots.includes("lost-item"));
+    const gates = module.cells.flatMap((cell) => cell.gates.filter((gate) => gate !== null));
+    if (lostItemCells.length !== 1 || lostItemCells[0]?.q !== 0 || lostItemCells[0]?.r !== 0
+      || module.cells.some((cell) => cell.objectSlots.some((slot) => slot !== "lost-item"))) {
+      context.addIssue({
+        code: "custom",
+        path: ["cells"],
+        message: "A casa precisa ter exatamente um receptor de item perdido na célula central.",
+      });
+    }
+    if (gates.length !== 18
+      || gates.filter((gate) => gate === "door").length !== 1
+      || gates.filter((gate) => gate === "window").length !== 1
+      || gates.filter((gate) => gate === "wall").length !== gates.length - 2) {
+      context.addIssue({
+        code: "custom",
+        path: ["cells"],
+        message: "A casa precisa ter exatamente uma porta, uma janela e paredes nas demais bordas externas.",
+      });
+    }
+    if (module.cells.some((cell) => cell.terrainType !== "abandoned-house")) {
+      context.addIssue({
+        code: "custom",
+        path: ["cells"],
+        message: "Todas as células da casa precisam manter o tipo de terreno da casa.",
+      });
     }
   }
 
@@ -135,6 +173,12 @@ const terrainModulePlacementSchema = z.strictObject({
 export const generatedTerrainMapSchema = z.strictObject({
   seed: z.string().min(1).max(128),
   modules: z.array(terrainModulePlacementSchema).max(8000),
+  doorStates: z.array(z.strictObject({
+    q: z.number().int(),
+    r: z.number().int(),
+    direction: z.number().int().min(0).max(5),
+    state: doorStateSchema,
+  })).default([]),
 }).superRefine((map, context) => {
   const origins = new Set<string>();
   for (const [index, module] of map.modules.entries()) {
@@ -153,9 +197,13 @@ export const generatedTerrainMapSchema = z.strictObject({
 export type TerrainModuleCell = z.infer<typeof terrainModuleCellSchema>;
 export type TerrainModule = z.infer<typeof terrainModuleSchema>;
 export type GeneratedTerrainMap = z.infer<typeof generatedTerrainMapSchema>;
+export type TerrainGate = Exclude<TerrainModuleCell["gates"][number], null>;
+export type DoorState = z.infer<typeof doorStateSchema>;
 
-export const BASE_MOVEMENT_CELLS_PER_SECOND = 0.5;
+export const BASE_MOVEMENT_CELLS_PER_TURN = 0.5;
+export const DEFAULT_TURN_DURATION_MS = 1000;
 export const movementSpeedSchema = z.number().positive().finite();
+export const turnDurationSchema = z.number().int().min(100).max(60000);
 
 export function movementMultiplier(dexterity: number): number {
   const level = z.number().int().min(1).max(3).parse(dexterity);
@@ -211,6 +259,7 @@ export function moveWithinTerrain(
   width: number,
   height: number,
   scale: number,
+  blockedGates: ReadonlySet<string> = new Set(),
 ): Point {
   z.number().nonnegative().finite().parse(maxDistance);
   const layout = terrainLayout(width, height, scale);
@@ -247,7 +296,9 @@ export function moveWithinTerrain(
       const toCell = byCoordinate.get(`${next.q},${next.r}`);
       if (direction < 0 || !fromCell?.traversable || !toCell?.traversable
         || fromCell.connectors[direction] === null
-        || fromCell.connectors[direction] !== toCell.connectors[(direction + 3) % 6]) return lastValid;
+        || fromCell.connectors[direction] !== toCell.connectors[(direction + 3) % 6]
+        || blockedGates.has(`${previous.q},${previous.r},${direction}`)
+        || blockedGates.has(`${next.q},${next.r},${(direction + 3) % 6}`)) return lastValid;
       previous = next;
     } else if (!byCoordinate.get(`${next.q},${next.r}`)?.traversable) return lastValid;
     lastValid = point;
@@ -258,7 +309,7 @@ export function moveWithinTerrain(
 function createStarterModule(
   id: string,
   name: string,
-  cells: Partial<Pick<TerrainModuleCell, "terrainType" | "traversable" | "actions" | "objectSlots" | "connectors">>[],
+  cells: Partial<Pick<TerrainModuleCell, "terrainType" | "traversable" | "actions" | "objectSlots" | "connectors" | "gates">>[],
 ): TerrainModule {
   return terrainModuleSchema.parse({
     id,
@@ -271,9 +322,33 @@ function createStarterModule(
       actions: [],
       objectSlots: [],
       connectors: Array(6).fill("path"),
+      gates: Array(6).fill(null),
       ...cells[index],
     })),
   });
+}
+
+function createAbandonedHouseModule(): TerrainModule {
+  const coordinates = new Set(moduleCoordinates.map(({ q, r }) => `${q},${r}`));
+  const cells = moduleCoordinates.map(({ q, r }) => {
+    const gates = hexDirections.map(({ q: dq, r: dr }, direction) => {
+      if (coordinates.has(`${q + dq},${r + dr}`)) return null;
+      if (q === 1 && r === 0 && direction === 0) return "door";
+      if (q === -1 && r === 0 && direction === 3) return "window";
+      return "wall";
+    });
+    return {
+      q,
+      r,
+      terrainType: "abandoned-house",
+      traversable: true,
+      actions: [],
+      objectSlots: q === 0 && r === 0 ? ["lost-item"] : [],
+      connectors: Array(6).fill("path"),
+      gates,
+    };
+  });
+  return terrainModuleSchema.parse({ id: "abandoned-house", name: "Casa abandonada", cells });
 }
 
 export const STARTER_TERRAIN_MODULES = terrainModuleCatalogSchema.parse([
@@ -302,6 +377,8 @@ export const STARTER_TERRAIN_MODULES = terrainModuleCatalogSchema.parse([
     { connectors: ["path", null, "path", "path", "path", "path"] },
     { connectors: ["path", "path", null, "path", "path", "path"] },
   ]),
+  createStarterModule("path-connector", "Trilha de ligação", []),
+  createAbandonedHouseModule(),
 ]);
 
 export function rotateTerrainModule(module: TerrainModule, steps: number): TerrainModule {
@@ -324,6 +401,9 @@ export function rotateTerrainModule(module: TerrainModule, steps: number): Terra
         r,
         connectors: cell.connectors.map((_, direction) =>
           cell.connectors[(direction - steps + 6) % 6] ?? null,
+        ),
+        gates: cell.gates.map((_, direction) =>
+          cell.gates[(direction - steps + 6) % 6] ?? null,
         ),
       };
     }),
@@ -489,10 +569,21 @@ export function generateTerrainMap(
   };
   const placed = new Map<number, number>();
   const clearing = modules.find((module) => module.id === "clearing") ?? modules[0]!;
-  for (const index of order) {
+  const pathConnector = modules.find((module) => module.id === "path-connector");
+  const abandonedHouse = modules.find((module) => module.id === "abandoned-house");
+  if (abandonedHouse && order.length < 3) {
+    return generatedTerrainMapSchema.parse({ seed, modules: [] });
+  }
+  for (const [orderIndex, index] of order.entries()) {
     const attached = [...neighbors[index]!].filter((neighbor) => placed.has(neighbor));
     const candidates = variants.flatMap(({ id }, variantIndex) =>
       index !== root || id === clearing.id ? [variantIndex] : [],
+    ).filter((variantIndex) =>
+      orderIndex !== 1 || !pathConnector || variants[variantIndex]!.id === pathConnector.id,
+    ).filter((variantIndex) =>
+      orderIndex !== 2 || !abandonedHouse || variants[variantIndex]!.id === abandonedHouse.id,
+    ).filter((variantIndex) =>
+      orderIndex <= 2 || !abandonedHouse || variants[variantIndex]!.id !== abandonedHouse.id,
     ).filter((variantIndex) => attached.every((neighbor) => {
         const origin = origins[index]!;
         const parentOrigin = origins[neighbor]!;
@@ -508,12 +599,27 @@ export function generateTerrainMap(
     placed.set(index, candidates[Math.floor(random() * candidates.length)]!);
   }
 
+  const placements = order.map((index) => {
+    const variant = variants[placed.get(index)!]!;
+    return { id: variant.id, ...origins[index]!, rotation: variant.rotation };
+  });
+  const doorStates = placements.flatMap((placement) => {
+    const module = modules.find(({ id }) => id === placement.id);
+    if (!module) return [];
+    return rotateTerrainModule(module, placement.rotation).cells.flatMap((cell) =>
+      cell.gates.flatMap((gate, direction) => gate === "door" ? [{
+        q: cell.q + placement.q,
+        r: cell.r + placement.r,
+        direction,
+        state: random() < 0.5 ? "open" as const : "closed" as const,
+      }] : []),
+    );
+  });
+
   return generatedTerrainMapSchema.parse({
     seed,
-    modules: order.map((index) => {
-      const variant = variants[placed.get(index)!]!;
-      return { id: variant.id, ...origins[index]!, rotation: variant.rotation };
-    }),
+    modules: placements,
+    doorStates,
   });
 }
 

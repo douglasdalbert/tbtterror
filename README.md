@@ -29,16 +29,25 @@ aqui prevalecem sobre alternativas antigas dessa proposta.
 - [x] Validar no tablet movimento, névoas e multitoque.
 - [ ] Ampliar testes de colisão quando forem criados e combinados vários tipos
   de terreno.
+- [x] Reutilizar botão multitoque e bloquear centralmente ações enquanto o
+  próprio token está pressionado (etapa 6).
+- [x] Criar a casa abandonada de sete células com receptor de item perdido,
+  paredes, porta e janela; incluir conector de trilha e temporização por turnos.
 - [ ] Definir regras dos objetivos antes de validar sua alcançabilidade.
+- [ ] Validar visualmente a casa e o mapa combinado no tablet.
 
 **Estado:** etapas 2 e 3 tiveram o aceite físico confirmado pelo usuário.
 Na configuração, `.env` prevalece e `.env.example` completa variáveis ausentes;
 `POSTGRES_PASSWORD` precisa ser definido localmente.
-A etapa 4 tem quatro módulos iniciais tipados e geração determinística por seed,
-com encaixes conectados, rotações de 60° e dimensionamento pela área útil e
-escala. O servidor mantém o mapa completo; clientes não recebem a seed nem
-células ainda ocultas. A validação de objetivos (regras ainda não definidas) e
-o aceite visual do mapa no tablet continuam pendentes. A etapa 5 foi
+A etapa 4 tem seis módulos iniciais tipados, incluindo conector de trilha e uma
+casa abandonada obrigatória em cada mapa gerado. Se não houver espaço para
+montá-la, o mapa não comporta o início da partida. A casa tem
+sete células transitáveis, um receptor `lost-item` no centro, uma porta e uma
+janela; as demais 16 bordas externas são paredes. O estado inicial da porta é
+determinístico por seed e sorteado entre aberta/fechada, sempre sem trava. O
+servidor mantém o mapa completo; clientes recebem apenas células exploradas e
+não recebem a seed nem células ocultas. A validação de objetivos (regras ainda
+não definidas) e o aceite visual da casa no tablet continuam pendentes. A etapa 5 foi
 implementada: o servidor limita movimentos pela destreza e bloqueia paredes/
 conectores incompatíveis; visão compartilhada revela células exploradas e envia
 somente terreno já descoberto, com névoa densa persistente e névoa leve
@@ -47,9 +56,11 @@ teste também demonstrou que barreiras podem bloquear o token. O comportamento
 observado em áreas marrons/verdes fica como protótipo, sem decisão de design.
 Quando a criação de vários terrenos for retomada, ampliar os testes de colisão
 entre tipos de terreno, conectores e suas combinações. A velocidade base é
-configurável por
-`BASE_MOVEMENT_CELLS_PER_SECOND` no `.env` (padrão 0,5 célula/s); o cliente
-recebe a mesma taxa do servidor. O raio padrão é três células e pode ser
+configurável em `BASE_MOVEMENT_CELLS_PER_TURN` (padrão 0,5 célula por turno);
+um turno dura 1000 ms por padrão e pode ser configurado entre 100 e 60000 ms
+por `TURN_DURATION_MS`. O servidor expõe duração e velocidade no snapshot, e
+ambos os lados calculam movimento na mesma unidade. O relógio de simulação
+também é publicado em turnos e congela durante a pausa. O raio padrão é três células e pode ser
 alterado por `PLAYER_VISION_RADIUS_CELLS` no `.env` (1–12). O catálogo público
 já omite atributos e capacidades internas do monstro. O aceite físico de
 movimento, névoas e multitoque foi confirmado, e o teste demonstrou bloqueio
@@ -134,15 +145,19 @@ o botão de cor aleatória e o modal de cores, incluindo a cor atual destacada.
 Depois, o usuário confirmou o aceite físico do checklist no tablet e informou
 que tudo funcionou.
 
-**Próxima etapa:** revisar no tablet o mapa modular. Movimento, névoas,
-multitoque e bloqueio por barreiras já foram testados. Quando a criação de
-vários terrenos for retomada, ampliar os testes de colisão cobrindo os tipos e
-combinações gerados; a diferença observada entre áreas marrons e verdes não é
-uma regra ou preferência de design. O movimento é livre durante a preparação e
-limitado pela destreza somente durante a fase `running`.
-Antes de validar a alcançabilidade, definir as regras do primeiro objetivo e
-suas dependências; a exigência de força 2 para combustível continua sendo
-proposta, não decisão.
+**Próxima etapa:** implementar ações autoritativas de porta e janela sobre a
+casa criada. A duração real de um turno foi definida em 1000 ms por padrão,
+configurável por `TURN_DURATION_MS`; a movimentação e o relógio de simulação
+agora usam turnos. Requisitos já definidos para essa etapa: abrir/fechar porta
+em 1 turno; quebrar porta trancada em 2 turnos com força 3 e deixá-la
+permanentemente aberta; saltar janela em 1 turno com destreza mínima 2. A porta
+da casa atual começa aberta ou fechada, nunca trancada. O botão multitoque e o
+bloqueio de ação durante o arrasto já têm teste automatizado. Movimento,
+névoas, multitoque e bloqueio por barreiras foram testados no tablet; a nova
+casa ainda precisa de aceite visual físico. Ao criar/combinar vários terrenos,
+ampliar os testes de colisão. Antes de validar alcançabilidade, definir as
+regras do primeiro objetivo e suas dependências; a exigência de força 2 para
+combustível continua sendo proposta, não decisão.
 
 **Primeiro marco jogável:** entrada dos jogadores, calibração compartilhada,
 tokens com movimento simultâneo e obstáculos simples no tablet real.
@@ -840,23 +855,30 @@ fisicamente o fluxo de prontidão, contagem, cancelamento, pausa e retomada.
   internos conectados e conectores recíprocos; rotação testada em seis passos.
 - [x] Mapa conectado com vários componentes, rotações de 60° e conectores compatíveis.
 - [x] Geração dimensionada pela área útil e pelo multiplicador do token.
+- [x] Conector de trilha entre módulos e casa de sete células com porta, janela,
+  paredes e um único receptor `lost-item`.
+- [x] Sorteio reproduzível da porta inicial, sempre aberta ou fechada e sem
+  trava; o cliente só recebe as bordas das células exploradas.
 - [ ] Validação de objetivos alcançáveis e dependências de itens/atributos.
 - [x] Geração reproduzível por seed para diagnóstico e testes.
 - [ ] Ampliar testes de colisão ao criar/combinar vários tipos de terreno.
 
 **Aceite:** testar rotações e conjuntos de seeds/tamanhos; não iniciar mapas
 inválidos; comunicar claramente quando a tela/escala não comportar a partida.
-Testes automatizados cobrem reprodutibilidade, encaixe, capacidade e rejeição
-de mapa pequeno. Ampliar a cobertura de colisões quando mais terrenos forem
-criados e combinados. O aceite visual completo no tablet continua pendente; a
-alcançabilidade dos objetivos depende das regras ainda não decididas.
+Testes automatizados cobrem reprodutibilidade, encaixe, capacidade, rejeição de
+mapa pequeno, invariantes/rotações da casa e bloqueio de porta fechada. Ampliar
+a cobertura de colisões quando mais terrenos forem criados e combinados. O
+aceite visual da nova casa no tablet continua pendente; a alcançabilidade dos
+objetivos depende das regras ainda não decididas.
 
 ### 5. Movimento e visão
 
 - [x] Movimento autoritativo com base configurável por
-  `BASE_MOVEMENT_CELLS_PER_SECOND` (padrão 0,5 célula/s) e multiplicador
-  `1 + (destreza - 1) × 0,1`; o cliente usa a mesma taxa do snapshot para
-  limitar a previsão ao dedo.
+  `BASE_MOVEMENT_CELLS_PER_TURN` (padrão 0,5 célula/turno) e multiplicador
+  `1 + (destreza - 1) × 0,1`; `TURN_DURATION_MS` define 1000 ms por turno
+  inicialmente. O servidor mede o relógio de simulação em turnos, congela-o
+  durante pausa e publica os parâmetros no snapshot; o cliente prevê com os
+  mesmos valores.
 - [x] Bloqueio de células não transitáveis e conectores incompatíveis, sem
   desvio automático; requisitos de ação/atributo aguardam regras definidas.
 - [x] Visão compartilhada de três células por padrão; raio configurável em
@@ -874,19 +896,32 @@ testes de colisão para vários tipos e combinações de terreno quando essa
 criação avançar. Visão do monstro e status em uso seguem pendentes até existir
 essa perspectiva autorizada.
 
-`BASE_MOVEMENT_CELLS_PER_SECOND` define a velocidade de movimento base em
-células hexagonais por segundo; deve ser positivo e usa `0.5` por padrão. O
-servidor valida a configuração e a inclui no snapshot para que o limite visual
-do cliente permaneça sincronizado com o limite autoritativo. Para aplicar uma
-mudança no Compose, recriar o servidor com
+`BASE_MOVEMENT_CELLS_PER_TURN` define o movimento base em células hexagonais
+por turno; deve ser positivo e usa `0.5` por padrão. `TURN_DURATION_MS` define
+a duração do turno, de 100 a 60000 ms, usando 1000 ms por padrão. O servidor
+valida e inclui esses valores no snapshot para sincronizar o limite visual do
+cliente. Configurações antigas com `BASE_MOVEMENT_CELLS_PER_SECOND` ainda são
+aceitas como fallback, convertendo sua taxa para células por turno conforme a
+duração configurada. Para aplicar uma mudança no Compose, recriar o servidor com
 `npm run compose -- up --build -d --wait server`; isso encerra a partida em memória, então
 não executar durante uma partida ativa.
 
 ### 6. Interações reutilizáveis
 
-- [ ] Botão de jogo com bloqueio centralizado por token pressionado.
+- [x] Botão de jogo multitoque reutilizável e bloqueio centralizado de ações
+  enquanto o próprio token está pressionado.
 - [ ] Durações, multiplicadores, cancelamento e requisitos cooperativos.
 - [ ] Portas, obstáculo simples, inventário e item básico.
+
+`TouchButton` fornece o controle multitoque reutilizável; o servidor rejeita
+comandos de ação do jogador cujo token está pressionado. Teste unitário verifica
+o bloqueio das ações desse jogador sem bloquear os controles de outro.
+As interações de terreno ficam para depois da confecção dos terrenos. Quando
+implementadas, suas durações serão expressas em turnos. O turno dura 1000 ms
+por padrão, configurável por `TURN_DURATION_MS`. Na casa criada, abrir/fechar
+a porta custará um turno; quebrar uma porta trancada custará dois turnos,
+exigirá força 3 e impedirá fechá-la novamente; saltar a janela custará um
+turno e exigirá destreza 2. A porta desta casa não começa trancada.
 
 **Aceite:** combinar gesto e ação rejeita apenas a ação daquele jogador;
 cooperação válida funciona; pausa preserva a duração restante.
@@ -937,7 +972,8 @@ sem duplicar controladores ou expor informações ocultas.
 - Modelo do tablet, navegador, orientação e limitações reais de multitoque.
 - Limites mínimo/máximo da escala e comportamento se o mapa não couber.
 - Fórmulas de atributos, compensações e fadiga; thresholds do arrasto.
-- Duração do turno, resgate, desativação e revelação por armadilha.
+- Durações específicas em turnos, resgate, desativação e revelação por
+  armadilha; o turno global já tem padrão configurável.
 - Reconexão após perder a identidade da aba e política para setores órfãos.
 - Regras exatas da fuga e requisitos de combustível.
 - Assets próprios/licenciados e identidade visual do primeiro monstro.
@@ -947,6 +983,10 @@ sem duplicar controladores ou expor informações ocultas.
 
 | Data | Entrega | Verificação |
 |---|---|---|
+| 2026-11-02 | Corrigido `.env.example` para declarar `BASE_MOVEMENT_CELLS_PER_TURN=0.5` explicitamente, em vez de mencionar a variável apenas em comentário. | Conferência da declaração e `git diff --check`; configuração local preservada. Próxima etapa permanece implementar as ações de porta e janela. |
+| 2026-11-02 | Casa abandonada obrigatória nos mapas compatíveis: módulo de sete células com receptor `lost-item` central, uma porta, uma janela e 16 paredes; conector de trilha, estados iniciais de porta aberta/fechada por seed, bloqueios filtrados por exploração e desenho no tabuleiro. Movimento e relógio da simulação convertidos para turnos; duração padrão 1000 ms configurável e velocidade base preservada em 0,5 célula/turno. | `npm run typecheck`, `npm test` (20 contratos, 16 servidor, 5 jogo), `npm run build`, `npm run compose -- config --quiet` e `git diff --check` passaram. Testes cobrem invariantes/rotações da casa, seed/estado da porta, colisão por paredes/portas/janela, compatibilidade do antigo valor por segundo e movimento no tempo configurado. Aceite visual no tablet e ações de porta/janela seguem pendentes; não houve alteração de banco nem teste de integração PostgreSQL. |
+| 2026-11-02 | Decisão de sequência: confeccionar terrenos antes de implementar interações neles. Todos os eventos em terrenos usarão turnos como unidade de duração; a duração real do turno ainda será definida. | Decisão registrada pelo usuário. Próxima entrega é a autoria/validação de terrenos modulares; sem alteração de código nesta atualização. |
+| 2026-11-02 | Reconciliação da etapa 6: botão multitoque reutilizável e bloqueio central de ações enquanto o próprio token está pressionado já estavam implementados; marcados como concluídos. Próxima mecânica e regras de duração/requisitos aguardam definição. | `TouchButton`, guarda central em `Match.command` e teste `pressed tokens centrally block all own actions but not another player's controls` revisados. Nenhuma regra nova ou alteração de código nesta atualização; validação completa da mecânica aguardando escolha do usuário. |
 | 2026-11-02 | Aceite físico parcial da etapa 5: movimento, névoas e multitoque confirmados no tablet; teste demonstrou que barreiras podem bloquear o token. Os casos ampliados para múltiplos tipos/combinações de terreno ficam para quando sua criação for retomada. | Confirmação manual do usuário no tablet. Aceite visual completo do mapa modular e testes ampliados de terrenos ainda pendentes; sem alterações de código nesta atualização. |
 | 2026-11-02 | Etapa 5 publicada no Compose `terror`; corrigido o contexto Docker para incluir `.env.example` no build do jogo sem incluir `.env`. Servidor e jogo recriados, PostgreSQL/volume preservados. | `npm run typecheck`, `npm test` (19 contratos + 15 servidor + 5 jogo), `npm run build`, `npm run check:stack` e `git diff --check` passaram; `postgres`, `server` e `game` saudáveis e a imagem ativa do jogo coincide com a publicada. Na publicação, aceite visual e físico ainda pendentes; o teste físico posterior está registrado acima. |
 | 2026-11-02 | `.env` passou a prevalecer sobre `.env.example`, que completa variáveis ausentes; fallback aplicado ao Compose, servidor local, Vite e verificações de stack. Senha de exemplo vazia e obrigatória no arquivo local. | `npm run typecheck`, `npm run build -w @terror/game`, `npm test`, `npm run compose -- config --quiet` e verificação de precedência do Node sem imprimir valores passaram. `check:lifecycle` não foi executado para evitar reiniciar serviços. |

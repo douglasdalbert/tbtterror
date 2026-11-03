@@ -14,7 +14,8 @@ try {
   const match = new Match(
     await loadCatalog(pool), undefined,
     config.PLAYER_VISION_RADIUS_CELLS,
-    config.BASE_MOVEMENT_CELLS_PER_SECOND,
+    config.BASE_MOVEMENT_CELLS_PER_TURN,
+    config.TURN_DURATION_MS,
   );
   const application = createApplication(pool, match);
   await new Promise<void>((resolve, reject) => {

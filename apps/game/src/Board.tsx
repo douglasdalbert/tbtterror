@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import Phaser from "phaser";
 import {
-  BASE_MOVEMENT_CELLS_PER_SECOND, boardArea, cellDimensions, hexCorners,
+  BASE_MOVEMENT_CELLS_PER_TURN, DEFAULT_TURN_DURATION_MS, boardArea, cellDimensions, hexCorners,
   movementMultiplier, terrainLayout, tokenHitCircle,
   initialTokenPosition, PLAYER_COLORS,
   type PublicCatalog, type MatchSnapshot, type MatchCommand, type PlayerColor,
@@ -104,7 +104,9 @@ class TerrainPreviewScene extends Phaser.Scene {
       || this.#snapshot.exploredTerrainCells.length !== snapshot.exploredTerrainCells.length
       || this.#snapshot.exploredTerrainCells.some((cell, index) => {
         const next = snapshot.exploredTerrainCells[index];
-        return !next || cell.q !== next.q || cell.r !== next.r || cell.terrainType !== next.terrainType;
+        return !next || cell.q !== next.q || cell.r !== next.r || cell.terrainType !== next.terrainType
+          || JSON.stringify(cell.objectSlots) !== JSON.stringify(next.objectSlots)
+          || JSON.stringify(cell.gates) !== JSON.stringify(next.gates);
       });
     const fogChanged = !this.#snapshot
       || this.#snapshot.visibleTerrainCellKeys.join(";") !== snapshot.visibleTerrainCellKeys.join(";")
@@ -139,9 +141,11 @@ class TerrainPreviewScene extends Phaser.Scene {
     const deltaX = requested.x - current.x;
     const deltaY = requested.y - current.y;
     const distance = Math.hypot(deltaX, deltaY);
-    const baseMovementSpeed = this.#snapshot?.baseMovementCellsPerSecond
-      ?? BASE_MOVEMENT_CELLS_PER_SECOND;
-    const maxDistance = layout.width * baseMovementSpeed * movementMultiplier(dexterity) * elapsed / 1000;
+    const baseMovementPerTurn = this.#snapshot?.baseMovementCellsPerTurn
+      ?? BASE_MOVEMENT_CELLS_PER_TURN;
+    const turnDurationMs = this.#snapshot?.turnDurationMs ?? DEFAULT_TURN_DURATION_MS;
+    const maxDistance = layout.width * baseMovementPerTurn * movementMultiplier(dexterity)
+      * elapsed / turnDurationMs;
     const fraction = this.#snapshot?.phase === "running" && distance > maxDistance && distance > 0
       ? maxDistance / distance
       : 1;
@@ -206,6 +210,7 @@ class TerrainPreviewScene extends Phaser.Scene {
           clearing: 0x3c5044,
           room: 0x51483c,
           wall: 0x343434,
+          "abandoned-house": 0x49443e,
         };
         for (const cell of this.#snapshot.exploredTerrainCells) {
           const center = {
@@ -216,6 +221,48 @@ class TerrainPreviewScene extends Phaser.Scene {
           graphics.lineStyle(Math.max(1, this.#scale), 0x64758b, 0.65);
           graphics.fillPoints(hexCorners(center, layout.radius), true);
           graphics.strokePoints(hexCorners(center, layout.radius), true);
+          const corners = hexCorners(center, layout.radius);
+          for (const gate of cell.gates) {
+            const edge = (gate.direction + 5) % 6;
+            const from = corners[edge];
+            const to = corners[(edge + 1) % 6];
+            if (!from || !to) continue;
+            const edgeLength = Math.hypot(to.x - from.x, to.y - from.y);
+            const unitX = (to.x - from.x) / edgeLength;
+            const unitY = (to.y - from.y) / edgeLength;
+            const lineWidth = Math.max(1, this.#scale * (gate.kind === "wall" ? 5 : 3));
+            const color = gate.kind === "wall" ? 0x17191b
+              : gate.kind === "window" ? 0x91aab8 : 0x8b6842;
+            graphics.lineStyle(lineWidth, color, gate.kind === "window" ? 0.5 : 0.95);
+            if (gate.kind === "door" && gate.state === "open") {
+              const gap = edgeLength * 0.45;
+              const segment = (edgeLength - gap) / 2;
+              graphics.lineBetween(from.x, from.y, from.x + unitX * segment, from.y + unitY * segment);
+              graphics.lineBetween(
+                to.x - unitX * segment,
+                to.y - unitY * segment,
+                to.x,
+                to.y,
+              );
+            } else if (gate.kind === "window") {
+              const inset = edgeLength * 0.2;
+              graphics.lineBetween(
+                from.x + unitX * inset,
+                from.y + unitY * inset,
+                to.x - unitX * inset,
+                to.y - unitY * inset,
+              );
+            } else {
+              graphics.lineBetween(from.x, from.y, to.x, to.y);
+            }
+          }
+          if (cell.objectSlots.includes("lost-item")) {
+            const markerRadius = Math.max(3, 5 * this.#scale);
+            graphics.fillStyle(0xd0b27a, 0.9);
+            graphics.fillCircle(center.x, center.y, markerRadius);
+            graphics.lineStyle(Math.max(1, this.#scale), 0x2a2520, 0.9);
+            graphics.strokeCircle(center.x, center.y, markerRadius);
+          }
         }
       } else {
         layout.placements.forEach((terrain, index) => {

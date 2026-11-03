@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import {
-  BASE_MOVEMENT_CELLS_PER_SECOND, catalogSchema,
-  matchSnapshotSchema, movementSpeedSchema, playerVisionRadiusSchema,
+  BASE_MOVEMENT_CELLS_PER_TURN, DEFAULT_TURN_DURATION_MS, catalogSchema,
+  matchSnapshotSchema, movementSpeedSchema, playerVisionRadiusSchema, turnDurationSchema,
   allocateAttributePoint, generateTerrainMap, initialPlayerAttributes, playerAttributesSchema,
   matchCommandSchema, moveWithinTerrain, movementMultiplier, terrainLayout, terrainMapCells,
   visibleTerrainCellIndices, initialTokenPosition,
   type CommandResult, type MatchPlayer,
   type Catalog,
+  type DoorState,
   type GeneratedTerrainMap,
   type MatchSnapshot,
   type PublicCatalog,
@@ -22,31 +23,36 @@ export class Match {
   #phase: MatchSnapshot["phase"] = "lobby";
   #remainingMs = 0;
   #resumeRemainingMs = 0;
-  #simulationMs = 0;
+  #simulationTurns = 0;
   #resumePhase: "chapter" | "running" = "running";
   #lastTime: number;
   #chapter = "";
   #error = "";
   #terrain: GeneratedTerrainMap | null = null;
   #terrainCells: ReturnType<typeof terrainMapCells> = [];
+  #doorStates = new Map<string, DoorState>();
+  #blockedGateKeys = new Set<string>();
   #exploredTerrainCells = new Map<string, MatchSnapshot["exploredTerrainCells"][number]>();
   #visibleTerrainCellKeys: string[] = [];
   #visionStateKey: string | null = null;
-  #lastMoveSimulationMs = new Map<number, number>();
+  #lastMoveSimulationTurn = new Map<number, number>();
   readonly #visionRadiusCells: number;
-  readonly #baseMovementCellsPerSecond: number;
+  readonly #baseMovementCellsPerTurn: number;
+  readonly #turnDurationMs: number;
   readonly #now: () => number;
 
   constructor(
     catalog: Catalog,
     now: () => number = () => performance.now(),
     visionRadiusCells = 3,
-    baseMovementCellsPerSecond = BASE_MOVEMENT_CELLS_PER_SECOND,
+    baseMovementCellsPerTurn = BASE_MOVEMENT_CELLS_PER_TURN,
+    turnDurationMs = DEFAULT_TURN_DURATION_MS,
   ) {
     this.#catalog = catalogSchema.parse(catalog);
     this.#now = now;
     this.#visionRadiusCells = playerVisionRadiusSchema.parse(visionRadiusCells);
-    this.#baseMovementCellsPerSecond = movementSpeedSchema.parse(baseMovementCellsPerSecond);
+    this.#baseMovementCellsPerTurn = movementSpeedSchema.parse(baseMovementCellsPerTurn);
+    this.#turnDurationMs = turnDurationSchema.parse(turnDurationMs);
     this.#lastTime = now();
   }
 
@@ -73,12 +79,13 @@ export class Match {
       arena: this.#arena,
       remainingMs: this.#remainingMs,
       resumeRemainingMs: this.#resumeRemainingMs,
-      simulationMs: this.#simulationMs,
+      simulationTurns: this.#simulationTurns,
       chapter: this.#chapter,
       error: this.#error,
       controlSlots: owner ? [...this.#owners].filter(([, o]) => o === owner).map(([slot]) => slot).sort((a, b) => a - b) : [],
       visionRadiusCells: this.#visionRadiusCells,
-      baseMovementCellsPerSecond: this.#baseMovementCellsPerSecond,
+      turnDurationMs: this.#turnDurationMs,
+      baseMovementCellsPerTurn: this.#baseMovementCellsPerTurn,
       exploredTerrainCells: [...this.#exploredTerrainCells.values()],
       visibleTerrainCellKeys: this.#visibleTerrainCellKeys,
     });
@@ -87,7 +94,8 @@ export class Match {
   #refreshVision() {
     const active = this.#terrain && ["chapter", "running", "paused"].includes(this.#phase);
     const stateKey = `${active ? this.#terrain?.seed : ""}|${this.#phase}|${[...this.#players.values()]
-      .map(({ slot, position }) => `${slot}:${position.x}:${position.y}`).join(";")}`;
+      .map(({ slot, position }) => `${slot}:${position.x}:${position.y}`).join(";")}|${[...this.#doorStates]
+      .map(([key, state]) => `${key}:${state}`).join(";")}`;
     if (stateKey === this.#visionStateKey) return;
     this.#visionStateKey = stateKey;
     this.#visibleTerrainCellKeys = [];
@@ -105,8 +113,37 @@ export class Match {
       const cell = this.#terrainCells[index];
       if (!cell) continue;
       const key = `${cell.q},${cell.r}`;
-      this.#exploredTerrainCells.set(key, { q: cell.q, r: cell.r, terrainType: cell.terrainType });
+      const gates: MatchSnapshot["exploredTerrainCells"][number]["gates"] = [];
+      cell.gates.forEach((gate, direction) => {
+        if (!gate) return;
+        if (gate === "door") {
+          gates.push({
+            direction,
+            kind: gate,
+            state: this.#doorStates.get(`${cell.q},${cell.r},${direction}`) ?? "closed",
+          });
+        } else gates.push({ direction, kind: gate });
+      });
+      this.#exploredTerrainCells.set(key, {
+        q: cell.q,
+        r: cell.r,
+        terrainType: cell.terrainType,
+        objectSlots: cell.objectSlots,
+        gates,
+      });
       this.#visibleTerrainCellKeys.push(key);
+    }
+  }
+
+  #rebuildBlockedGates() {
+    this.#blockedGateKeys.clear();
+    for (const cell of this.#terrainCells) {
+      for (const [direction, gate] of cell.gates.entries()) {
+        if (gate === "wall" || gate === "window"
+          || (gate === "door" && this.#doorStates.get(`${cell.q},${cell.r},${direction}`) !== "open")) {
+          this.#blockedGateKeys.add(`${cell.q},${cell.r},${direction}`);
+        }
+      }
     }
   }
 
@@ -150,7 +187,7 @@ export class Match {
       return true;
     }
     if (this.#phase === "running") {
-      this.#simulationMs += delta;
+      this.#simulationTurns += delta / this.#turnDurationMs;
       return true;
     }
     this.#remainingMs = Math.max(0, this.#remainingMs - delta);
@@ -207,7 +244,7 @@ export class Match {
         resumeReady: false, connected: true, pressed: false,
         position: initialTokenPosition(command.slot, layout.area, layout.tokenDiameter),
       });
-      this.#lastMoveSimulationMs.set(command.slot, this.#simulationMs);
+      this.#lastMoveSimulationTurn.set(command.slot, this.#simulationTurns);
       this.#owners.set(command.slot, owner);
       this.#cancelCountdown();
       return { ok: true };
@@ -225,27 +262,31 @@ export class Match {
     if (!player || this.#owners.get(command.slot) !== owner) return fail("Este jogador não pertence a este cliente.");
     if (command.type === "release") {
       player.pressed = false;
-      this.#lastMoveSimulationMs.delete(command.slot);
+      this.#lastMoveSimulationTurn.delete(command.slot);
       return { ok: true };
     }
     if (command.type === "move") {
       if (!player.pressed || !["lobby", "countdown", "running"].includes(this.#phase)) return fail("Movimento indisponível.");
       const layout = terrainLayout(this.#arena.width, this.#arena.height, this.#arena.scale);
       if (this.#phase === "running" && this.#terrain) {
-        const previousTime = this.#lastMoveSimulationMs.get(command.slot) ?? this.#simulationMs;
-        const elapsedMs = Math.min(250, Math.max(0, this.#simulationMs - previousTime));
-        this.#lastMoveSimulationMs.set(command.slot, this.#simulationMs);
+        const previousTurn = this.#lastMoveSimulationTurn.get(command.slot) ?? this.#simulationTurns;
+        const elapsedTurns = Math.min(
+          250 / this.#turnDurationMs,
+          Math.max(0, this.#simulationTurns - previousTurn),
+        );
+        this.#lastMoveSimulationTurn.set(command.slot, this.#simulationTurns);
         player.position = moveWithinTerrain(
           this.#terrainCells,
           player.position,
           command.position,
-          this.#baseMovementCellsPerSecond
+          this.#baseMovementCellsPerTurn
             * movementMultiplier(player.attributes.dexterity)
             * layout.width
-            * elapsedMs / 1000,
+            * elapsedTurns,
           this.#arena.width,
           this.#arena.height,
           this.#arena.scale,
+          this.#blockedGateKeys,
         );
       } else {
         const radius = layout.tokenDiameter / 2;
@@ -260,19 +301,21 @@ export class Match {
     if (command.type === "press") {
       if (!["lobby", "countdown", "running"].includes(this.#phase)) return fail("Movimento indisponível durante pausa ou capítulo.");
       player.pressed = true;
-      this.#lastMoveSimulationMs.set(command.slot, this.#simulationMs);
+      this.#lastMoveSimulationTurn.set(command.slot, this.#simulationTurns);
       return { ok: true };
     }
     if (command.type === "leave") {
       this.#players.delete(command.slot);
       this.#owners.delete(command.slot);
-      this.#lastMoveSimulationMs.delete(command.slot);
+      this.#lastMoveSimulationTurn.delete(command.slot);
       if (!this.#players.size) {
         this.#phase = "lobby";
-        this.#simulationMs = 0;
+        this.#simulationTurns = 0;
         this.#chapter = "";
         this.#error = "";
         this.#terrain = null;
+        this.#doorStates.clear();
+        this.#blockedGateKeys.clear();
         this.#exploredTerrainCells.clear();
         this.#remainingMs = 0;
         this.#resumeRemainingMs = 0;
@@ -317,6 +360,11 @@ export class Match {
           }
           this.#terrain = terrain;
           this.#terrainCells = terrainMapCells(terrain);
+          this.#doorStates = new Map(terrain.doorStates.map(({ q, r, direction, state }) => [
+            `${q},${r},${direction}`,
+            state,
+          ]));
+          this.#rebuildBlockedGates();
         }
       }
       player.ready = command.value;
@@ -336,12 +384,14 @@ export class Match {
     if (this.#phase === "countdown") this.#phase = "lobby";
     this.#remainingMs = 0;
     this.#terrain = null;
+    this.#doorStates.clear();
+    this.#blockedGateKeys.clear();
     this.#terrainCells = [];
     this.#terrainCells = [];
     this.#exploredTerrainCells.clear();
     this.#visibleTerrainCellKeys = [];
     this.#visionStateKey = null;
-    this.#lastMoveSimulationMs.clear();
+    this.#lastMoveSimulationTurn.clear();
   }
 
   #resetPreparation() {
@@ -362,7 +412,7 @@ export class Match {
     this.#players.forEach((p) => {
       p.pressed = false;
       p.resumeReady = false;
-      this.#lastMoveSimulationMs.delete(p.slot);
+      this.#lastMoveSimulationTurn.delete(p.slot);
     });
   }
 
