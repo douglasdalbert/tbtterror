@@ -2,11 +2,14 @@ import { useEffect, useRef } from "react";
 import Phaser from "phaser";
 import {
   BASE_MOVEMENT_CELLS_PER_TURN, DEFAULT_TURN_DURATION_MS, boardArea, cellDimensions, hexCorners,
+  DEFAULT_HEX_SIDE_TOKEN_RATIO,
   movementMultiplier, terrainLayout, tokenHitCircle,
   initialTokenPosition, PLAYER_COLORS,
   type PublicCatalog, type MatchSnapshot, type MatchCommand, type PlayerColor,
 } from "@terror/contracts";
 import { tokenMarkerPositions, tokenMarkerShapes } from "./TokenVisual.js";
+
+const isProduction = import.meta.env.APP_NODE_ENV === "production";
 
 export interface LayoutSummary {
   capacity: number;
@@ -32,12 +35,14 @@ class TerrainPreviewScene extends Phaser.Scene {
   #graphics: Phaser.GameObjects.Graphics | undefined;
   #fogGraphics: Phaser.GameObjects.Graphics | undefined;
   #tokenGraphics: Phaser.GameObjects.Graphics | undefined;
+  #terrainLabel: Phaser.GameObjects.Text | undefined;
   #scale = 1;
   #players: PreviewPlayer[] = [];
   #layout: ReturnType<typeof terrainLayout> | undefined;
   #layoutWidth = -1;
   #layoutHeight = -1;
   #layoutScale = -1;
+  #layoutHexSideTokenRatio = -1;
   #positions = new Map<number, Position>();
   #zones = new Map<number, Phaser.GameObjects.Zone>();
   #zoneDiameters = new Map<number, number>();
@@ -50,7 +55,7 @@ class TerrainPreviewScene extends Phaser.Scene {
   #lastInput = new Map<number, number>();
 
   create() {
-    this.#graphics = this.add.graphics();
+    this.#graphics = this.add.graphics().setDepth(-2);
     this.#fogGraphics = this.add.graphics();
     this.#tokenGraphics = this.add.graphics();
     this.createMarkerTextures();
@@ -99,6 +104,7 @@ class TerrainPreviewScene extends Phaser.Scene {
     const geometryChanged = !this.#layout || !this.#snapshot
       || this.#snapshot.arena.width !== snapshot.arena.width
       || this.#snapshot.arena.height !== snapshot.arena.height
+      || this.#snapshot.arena.hexSideTokenRatio !== snapshot.arena.hexSideTokenRatio
       || this.#snapshot.arena.scale !== snapshot.arena.scale;
     const terrainChanged = !this.#snapshot
       || this.#snapshot.exploredTerrainCells.length !== snapshot.exploredTerrainCells.length
@@ -202,6 +208,8 @@ class TerrainPreviewScene extends Phaser.Scene {
     const layout = this.currentLayout();
     if (updateSummary) {
       graphics.clear();
+      this.#terrainLabel?.destroy();
+      this.#terrainLabel = undefined;
       graphics.lineStyle(1, 0x718198, 0.3);
       graphics.strokeRect(layout.area.x, layout.area.y, layout.area.width, layout.area.height);
       if (this.#snapshot) {
@@ -235,14 +243,11 @@ class TerrainPreviewScene extends Phaser.Scene {
               : gate.kind === "window" ? 0x91aab8 : 0x8b6842;
             graphics.lineStyle(lineWidth, color, gate.kind === "window" ? 0.5 : 0.95);
             if (gate.kind === "door" && gate.state === "open") {
-              const gap = edgeLength * 0.45;
-              const segment = (edgeLength - gap) / 2;
-              graphics.lineBetween(from.x, from.y, from.x + unitX * segment, from.y + unitY * segment);
+              // The open leaf must not narrow the full-side passage.
               graphics.lineBetween(
-                to.x - unitX * segment,
-                to.y - unitY * segment,
-                to.x,
-                to.y,
+                from.x, from.y,
+                from.x - unitY * edgeLength,
+                from.y + unitX * edgeLength,
               );
             } else if (gate.kind === "window") {
               const inset = edgeLength * 0.2;
@@ -262,6 +267,11 @@ class TerrainPreviewScene extends Phaser.Scene {
             graphics.fillCircle(center.x, center.y, markerRadius);
             graphics.lineStyle(Math.max(1, this.#scale), 0x2a2520, 0.9);
             graphics.strokeCircle(center.x, center.y, markerRadius);
+          }
+          if (!isProduction && cell.terrainType === "abandoned-house" && !this.#terrainLabel) {
+            this.#terrainLabel = this.add.text(center.x, center.y - layout.radius * 0.4, "Casa\nabandonada", {
+              fontFamily: "sans-serif", fontSize: `${12 * this.#scale}px`, color: "#e5dfd4", align: "center",
+            }).setOrigin(0.5).setDepth(-1);
           }
         }
       } else {
@@ -337,7 +347,7 @@ class TerrainPreviewScene extends Phaser.Scene {
     if (!["chapter", "running", "paused"].includes(snapshot.phase) || !snapshot.exploredTerrainCells.length) return;
 
     const layout = this.currentLayout();
-    const dimensions = cellDimensions(snapshot.arena.scale);
+    const dimensions = cellDimensions(snapshot.arena.scale, snapshot.arena.hexSideTokenRatio);
     const explored = new Set(snapshot.exploredTerrainCells.map(({ q, r }) => `${q},${r}`));
     const visible = new Set(snapshot.visibleTerrainCellKeys);
     const minR = Math.floor(-snapshot.arena.height / (dimensions.radius * 1.5)) - 1;
@@ -363,16 +373,18 @@ class TerrainPreviewScene extends Phaser.Scene {
   private currentLayout() {
     const width = this.#snapshot?.arena.width ?? this.scale.width;
     const height = this.#snapshot?.arena.height ?? this.scale.height;
+    const hexSideTokenRatio = this.#snapshot?.arena.hexSideTokenRatio ?? DEFAULT_HEX_SIDE_TOKEN_RATIO;
     const sourceArea = boardArea(width, height, this.#scale);
     const targetArea = boardArea(this.scale.width, this.scale.height, this.#scale);
     const zoom = Math.min(targetArea.width / sourceArea.width, targetArea.height / sourceArea.height);
     this.cameras.main.setZoom(zoom).centerOn(width / 2, height / 2);
     if (!this.#layout || width !== this.#layoutWidth || height !== this.#layoutHeight
-      || this.#scale !== this.#layoutScale) {
-      this.#layout = terrainLayout(width, height, this.#scale);
+      || this.#scale !== this.#layoutScale || hexSideTokenRatio !== this.#layoutHexSideTokenRatio) {
+      this.#layout = terrainLayout(width, height, this.#scale, hexSideTokenRatio);
       this.#layoutWidth = width;
       this.#layoutHeight = height;
       this.#layoutScale = this.#scale;
+      this.#layoutHexSideTokenRatio = hexSideTokenRatio;
     }
     return this.#layout;
   }

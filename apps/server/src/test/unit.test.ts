@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { terrainLayout, type Catalog, type MatchCommand } from "@terror/contracts";
+import { cellDimensions, terrainLayout, type Catalog, type MatchCommand } from "@terror/contracts";
 import { readConfig } from "../config.js";
 import { Match } from "../match.js";
 
@@ -295,6 +295,7 @@ test("configuration rejects missing or example secrets without exposing them", (
   });
   assert.equal(config.PORT, 3000);
   assert.equal(config.PLAYER_VISION_RADIUS_CELLS, 3);
+  assert.equal(config.HEX_SIDE_TOKEN_RATIO, 1.2);
   assert.equal(config.TURN_DURATION_MS, 1000);
   assert.equal(config.BASE_MOVEMENT_CELLS_PER_TURN, 0.5);
   assert.equal(readConfig({
@@ -365,10 +366,22 @@ test("configured movement speed is validated and included in snapshots", () => {
   assert.throws(() => new Match(catalog, undefined, 3, 0));
 });
 
+test("hex side ratio is validated and shared in the arena snapshot", () => {
+  const config = readConfig({ POSTGRES_PASSWORD: "b".repeat(32), HEX_SIDE_TOKEN_RATIO: "1.5" });
+  const match = new Match(catalog, undefined, 3, 0.5, 1000, config.HEX_SIDE_TOKEN_RATIO);
+  assert.equal(match.snapshot().arena.hexSideTokenRatio, 1.5);
+  for (const ratio of ["0", "1.19", "Infinity", "invalid"]) {
+    assert.throws(() => readConfig({
+      POSTGRES_PASSWORD: "b".repeat(32), HEX_SIDE_TOKEN_RATIO: ratio,
+    }), /Invalid server configuration/);
+  }
+  assert.throws(() => new Match(catalog, undefined, 3, 0.5, 1000, 1.19));
+});
+
 test("movement is measured using the configured turn duration", () => {
-  const movementAfter = (turnDurationMs: number) => {
+  const movementAfter = (turnDurationMs: number, ratio = 1.2) => {
     let time = 0;
-    const match = new Match(catalog, () => time, 3, 1, turnDurationMs);
+    const match = new Match(catalog, () => time, 3, 1, turnDurationMs, ratio);
     match.connect("tablet");
     const command = (value: MatchCommand) => assert.deepEqual(
       match.command("tablet", value),
@@ -387,6 +400,7 @@ test("movement is measured using the configured turn duration", () => {
     const after = match.snapshot().players[0]!.position;
     return Math.hypot(after.x - before.x, after.y - before.y);
   };
-  assert.ok(Math.abs(movementAfter(1000) - 8) < 0.01);
-  assert.ok(Math.abs(movementAfter(2000) - 4) < 0.01);
+  assert.ok(Math.abs(movementAfter(1000) - cellDimensions(1).width * 0.1) < 0.01);
+  assert.ok(Math.abs(movementAfter(2000) - cellDimensions(1).width * 0.05) < 0.01);
+  assert.ok(Math.abs(movementAfter(1000, 1.5) - cellDimensions(1, 1.5).width * 0.1) < 0.01);
 });

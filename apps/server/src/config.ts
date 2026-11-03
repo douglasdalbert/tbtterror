@@ -1,6 +1,7 @@
 import {
   BASE_MOVEMENT_CELLS_PER_TURN, DEFAULT_TURN_DURATION_MS,
   movementSpeedSchema, turnDurationSchema,
+  DEFAULT_HEX_SIDE_TOKEN_RATIO, hexSideTokenRatioSchema,
 } from "@terror/contracts";
 import { z } from "zod";
 
@@ -17,6 +18,7 @@ const configSchema = z.object({
   POSTGRES_PASSWORD: secretSchema,
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   PLAYER_VISION_RADIUS_CELLS: z.coerce.number().int().min(1).max(12).default(3),
+  HEX_SIDE_TOKEN_RATIO: z.coerce.number().pipe(hexSideTokenRatioSchema).default(DEFAULT_HEX_SIDE_TOKEN_RATIO),
   TURN_DURATION_MS: z.coerce.number().pipe(turnDurationSchema).default(DEFAULT_TURN_DURATION_MS),
   BASE_MOVEMENT_CELLS_PER_TURN: z.coerce.number().pipe(movementSpeedSchema)
     .default(BASE_MOVEMENT_CELLS_PER_TURN),

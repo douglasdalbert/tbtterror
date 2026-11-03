@@ -22,6 +22,8 @@ aqui prevalecem sobre alternativas antigas dessa proposta.
 - [x] Validar acesso LAN no tablet real.
 - [x] Corrigir falha de inicialização em HTTP da LAN e validar no navegador.
 - [x] Ocultar menu de jogo e configurações após o início, preservando os controles da partida.
+- [x] Ocultar painel central (Terror, partida e prévia) durante o jogo e
+  reapresentá-lo na pausa, preservando avisos e a apresentação breve do capítulo.
 - [x] Compactar setores, fixar miniatura interna e reorganizar atributos horizontalmente.
 - [x] Selecionar cor exclusiva para cada token durante a entrada do jogador.
 - [x] Completar no tablet o aceite do fluxo de entrada, controles e dez contatos simultâneos.
@@ -32,7 +34,10 @@ aqui prevalecem sobre alternativas antigas dessa proposta.
 - [x] Reutilizar botão multitoque e bloquear centralmente ações enquanto o
   próprio token está pressionado (etapa 6).
 - [x] Criar a casa abandonada de sete células com receptor de item perdido,
-  paredes, porta e janela; incluir conector de trilha e temporização por turnos.
+  paredes, porta e janelas; incluir conector de trilha e temporização por turnos.
+- [x] Garantir caminho externo da porta, sortear 0–3 janelas sem contato com
+  ela e posicionar o receptor de item fora das células com passagens.
+- [x] Configurar cada lado do hexágono como pelo menos 1,2 diâmetro do token.
 - [ ] Definir regras dos objetivos antes de validar sua alcançabilidade.
 - [ ] Validar visualmente a casa e o mapa combinado no tablet.
 
@@ -42,8 +47,15 @@ Na configuração, `.env` prevalece e `.env.example` completa variáveis ausente
 A etapa 4 tem seis módulos iniciais tipados, incluindo conector de trilha e uma
 casa abandonada obrigatória em cada mapa gerado. Se não houver espaço para
 montá-la, o mapa não comporta o início da partida. A casa tem
-sete células transitáveis, um receptor `lost-item` no centro, uma porta e uma
-janela; as demais 16 bordas externas são paredes. O estado inicial da porta é
+sete células transitáveis, um receptor `lost-item` sorteado em qualquer célula
+sem porta nem janela, uma porta e de zero a três janelas sorteadas; as demais
+bordas externas são paredes. Janelas nunca compartilham vértices com a porta,
+mas podem encostar umas nas outras. Só a porta exige caminho externo conectado
+ao restante do mapa; janelas podem apontar para fora dele. A disposição da casa
+é reproduzível pela seed e fica preservada no mapa privado do servidor.
+Fora de produção (`NODE_ENV` diferente de `production`), o tabuleiro escreve
+“Casa abandonada” dentro da área explorada da casa, sob a névoa.
+O estado inicial da porta é
 determinístico por seed e sorteado entre aberta/fechada, sempre sem trava. O
 servidor mantém o mapa completo; clientes recebem apenas células exploradas e
 não recebem a seed nem células ocultas. A validação de objetivos (regras ainda
@@ -85,6 +97,10 @@ três letras (AAA inicialmente), sem duplicar nomes na mesma mesa; abre a aba
 de jogo com “Estou pronto”, sem botão de menu para essa aba. Nome fica no extremo
 superior da coluna esquerda e X no inferior. Em token/personagem, o X apenas
 volta ao painel de jogo; estando no jogo, abre a confirmação de saída no setor.
+O painel central com “Terror”, quantidade de jogadores e prévia aparece na
+preparação/contagem e na pausa, mas não durante o capítulo ou a partida em curso.
+O capítulo mantém apenas sua apresentação breve; erros e perda de conexão
+continuam explícitos, sem trazer de volta o título nem a prévia durante o jogo.
 O nome acessível do botão acompanha a ação: voltar ou sair.
 Na entrada, as três letras ficam ao lado de um seletor de cor inicialmente
 aleatória. Há 13 cores de alto contraste (vermelho, azul, verde, amarelo, roxo,
@@ -146,7 +162,8 @@ Depois, o usuário confirmou o aceite físico do checklist no tablet e informou
 que tudo funcionou.
 
 **Próxima etapa:** implementar ações autoritativas de porta e janela sobre a
-casa criada. A duração real de um turno foi definida em 1000 ms por padrão,
+casa criada, após conferir visualmente no tablet a nova geometria e disposição.
+A duração real de um turno foi definida em 1000 ms por padrão,
 configurável por `TURN_DURATION_MS`; a movimentação e o relógio de simulação
 agora usam turnos. Requisitos já definidos para essa etapa: abrir/fechar porta
 em 1 turno; quebrar porta trancada em 2 turnos com força 3 e deixá-la
@@ -252,9 +269,14 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
 - Trata-se da escala interna do jogo, não do zoom do navegador.
 - Diâmetro máximo inicial do token: **64 pixels CSS**, incluindo todos os
   indicadores de status desenhados dentro da borda, sem aumentar sua dimensão.
-- Folga: **8 pixels CSS por lado**. Para escala `s`, token = `64s`, folga = `8s`,
-  distância entre lados opostos do hexágono = `80s`, raio até a ponta =
-  `80s / sqrt(3)` e altura = `160s / sqrt(3)` (aproximadamente `92,38s`).
+- Cada um dos seis lados mede `HEX_SIDE_TOKEN_RATIO` vezes o diâmetro do token;
+  o `.env`, o exemplo, o gerador de configuração e o Compose usam **1,2** por
+  padrão, também o mínimo aceito. Para escala `s` e razão `k`, token = `64s`,
+  lado = raio até a ponta = `64sk`, distância entre lados opostos =
+  `sqrt(3) × 64sk`, altura = `128sk` e folga lateral =
+  `(sqrt(3) × 64sk - 64s) / 2`. Com `s=1` e `k=1,2`, lado = `76,8` px,
+  largura ≈ `133,02` px e altura = `153,6` px. Cliente e servidor compartilham
+  a razão autoritativa no snapshot; as células maiores reduzem a capacidade.
 - Primeiro calcular a célula; depois encaixar componentes completos de sete
   células na área útil. Nunca reduzir células automaticamente para caber mais.
 - A prévia usa uma malha de componentes sem células sobrepostas e apenas
@@ -855,8 +877,13 @@ fisicamente o fluxo de prontidão, contagem, cancelamento, pausa e retomada.
   internos conectados e conectores recíprocos; rotação testada em seis passos.
 - [x] Mapa conectado com vários componentes, rotações de 60° e conectores compatíveis.
 - [x] Geração dimensionada pela área útil e pelo multiplicador do token.
-- [x] Conector de trilha entre módulos e casa de sete células com porta, janela,
+- [x] Conector de trilha entre módulos e casa de sete células com porta, 0–3 janelas,
   paredes e um único receptor `lost-item`.
+- [x] Sorteio por seed das janelas e do receptor em qualquer célula sem porta
+  nem janela; rejeição de janelas que compartilham vértices com a porta,
+  permitindo contato entre janelas.
+- [x] Porta com vizinho externo transitável e encaixe recíproco; rede exterior
+  conectada sem depender das passagens da casa. Janelas dispensam vizinho.
 - [x] Sorteio reproduzível da porta inicial, sempre aberta ou fechada e sem
   trava; o cliente só recebe as bordas das células exploradas.
 - [ ] Validação de objetivos alcançáveis e dependências de itens/atributos.
@@ -866,7 +893,12 @@ fisicamente o fluxo de prontidão, contagem, cancelamento, pausa e retomada.
 **Aceite:** testar rotações e conjuntos de seeds/tamanhos; não iniciar mapas
 inválidos; comunicar claramente quando a tela/escala não comportar a partida.
 Testes automatizados cobrem reprodutibilidade, encaixe, capacidade, rejeição de
-mapa pequeno, invariantes/rotações da casa e bloqueio de porta fechada. Ampliar
+mapa pequeno, seis rotações, 0–3 janelas, janelas voltadas para fora do mapa,
+contato entre janelas, proibição de contato com a porta, todas as seis posições
+elegíveis para o item, caminhos externos e bloqueio de porta fechada. O desenho
+da porta aberta não estreita a passagem: a folha gira para dentro, deixando
+o lado inteiro livre visualmente. A colisão atual verifica a trajetória do centro
+do token entre células, não a distância de um corpo circular às paredes. Ampliar
 a cobertura de colisões quando mais terrenos forem criados e combinados. O
 aceite visual da nova casa no tablet continua pendente; a alcançabilidade dos
 objetivos depende das regras ainda não decididas.
@@ -983,6 +1015,8 @@ sem duplicar controladores ou expor informações ocultas.
 
 | Data | Entrega | Verificação |
 |---|---|---|
+| 2026-11-03 | Painel central oculto ao iniciar o capítulo e durante a partida; retorna na pausa. Apresentação breve do capítulo e avisos de erro/conexão preservados sem título/prévia durante o jogo. | `npm run typecheck -w @terror/game` e `npm run build -w @terror/game` passaram. Navegador isolado com Socket.IO simulado verificou preparação, contagem, capítulo sem painel, partida sem painel, pausa/contagem de retomada, retomada, erro explícito e desconexão/reconexão. Servidor da partida preservado, sem publicação; aceite físico pendente. Próxima etapa permanece conferir a casa no tablet e implementar ações de porta/janela. |
+| 2026-11-03 | Geometria compartilhada por `HEX_SIDE_TOKEN_RATIO=1.2`: cada lado mede pelo menos 1,2 diâmetro do token, sem reduzir células para caber. Porta obrigatoriamente ligada à rede exterior; casa com 0–3 janelas sorteadas, sem compartilhar vértices com a porta e podendo apontar para fora do mapa ou encostar entre si. Receptor `lost-item` sorteado em qualquer célula sem porta/janela, sem obrigação de ficar no centro; disposição preservada por seed no servidor. Rótulo provisório da casa somente fora de produção e sob a névoa. | `npm test` (22 contratos, 17 servidor, 5 jogo), `npm run typecheck`, `npm run build`, `npm run compose -- config --quiet`, integração API/Socket.IO no PostgreSQL isolado (`npm run compose -- --profile test run --build --rm integration`) e `git diff --check` passaram. Testes cobrem os seis lados, escalas/razões, seis rotações, retrato/paisagem, janelas externas/adjacentes, contato proibido com a porta e posições elegíveis do item. Navegador com tabuleiro isolado confirmou rótulo em desenvolvimento, remoção sem casa explorada e ausência em produção. Banco de teste removido e servidores temporários encerrados; serviços da partida preservados, sem publicação/reinício. Aceite físico no tablet e ações autoritativas de porta/janela continuam pendentes; próxima etapa é conferir visualmente a nova casa e então implementar essas ações. |
 | 2026-11-02 | Corrigido `.env.example` para declarar `BASE_MOVEMENT_CELLS_PER_TURN=0.5` explicitamente, em vez de mencionar a variável apenas em comentário. | Conferência da declaração e `git diff --check`; configuração local preservada. Próxima etapa permanece implementar as ações de porta e janela. |
 | 2026-11-02 | Casa abandonada obrigatória nos mapas compatíveis: módulo de sete células com receptor `lost-item` central, uma porta, uma janela e 16 paredes; conector de trilha, estados iniciais de porta aberta/fechada por seed, bloqueios filtrados por exploração e desenho no tabuleiro. Movimento e relógio da simulação convertidos para turnos; duração padrão 1000 ms configurável e velocidade base preservada em 0,5 célula/turno. | `npm run typecheck`, `npm test` (20 contratos, 16 servidor, 5 jogo), `npm run build`, `npm run compose -- config --quiet` e `git diff --check` passaram. Testes cobrem invariantes/rotações da casa, seed/estado da porta, colisão por paredes/portas/janela, compatibilidade do antigo valor por segundo e movimento no tempo configurado. Aceite visual no tablet e ações de porta/janela seguem pendentes; não houve alteração de banco nem teste de integração PostgreSQL. |
 | 2026-11-02 | Decisão de sequência: confeccionar terrenos antes de implementar interações neles. Todos os eventos em terrenos usarão turnos como unidade de duração; a duração real do turno ainda será definida. | Decisão registrada pelo usuário. Próxima entrega é a autoria/validação de terrenos modulares; sem alteração de código nesta atualização. |

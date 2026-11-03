@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   BASE_MOVEMENT_CELLS_PER_TURN, DEFAULT_TURN_DURATION_MS, catalogSchema,
+  DEFAULT_HEX_SIDE_TOKEN_RATIO, hexSideTokenRatioSchema,
   matchSnapshotSchema, movementSpeedSchema, playerVisionRadiusSchema, turnDurationSchema,
   allocateAttributePoint, generateTerrainMap, initialPlayerAttributes, playerAttributesSchema,
   matchCommandSchema, moveWithinTerrain, movementMultiplier, terrainLayout, terrainMapCells,
@@ -19,7 +20,7 @@ export class Match {
   #players = new Map<number, MatchPlayer>();
   #owners = new Map<number, string>();
   #connected = new Set<string>();
-  #arena = { width: 1920, height: 1200, scale: 1 };
+  #arena = { width: 1920, height: 1200, scale: 1, hexSideTokenRatio: DEFAULT_HEX_SIDE_TOKEN_RATIO };
   #phase: MatchSnapshot["phase"] = "lobby";
   #remainingMs = 0;
   #resumeRemainingMs = 0;
@@ -47,12 +48,14 @@ export class Match {
     visionRadiusCells = 3,
     baseMovementCellsPerTurn = BASE_MOVEMENT_CELLS_PER_TURN,
     turnDurationMs = DEFAULT_TURN_DURATION_MS,
+    hexSideTokenRatio = DEFAULT_HEX_SIDE_TOKEN_RATIO,
   ) {
     this.#catalog = catalogSchema.parse(catalog);
     this.#now = now;
     this.#visionRadiusCells = playerVisionRadiusSchema.parse(visionRadiusCells);
     this.#baseMovementCellsPerTurn = movementSpeedSchema.parse(baseMovementCellsPerTurn);
     this.#turnDurationMs = turnDurationSchema.parse(turnDurationMs);
+    this.#arena.hexSideTokenRatio = hexSideTokenRatioSchema.parse(hexSideTokenRatio);
     this.#lastTime = now();
   }
 
@@ -108,6 +111,7 @@ export class Match {
       this.#arena.height,
       this.#arena.scale,
       this.#visionRadiusCells,
+      this.#arena.hexSideTokenRatio,
     );
     for (const index of visibleIndices) {
       const cell = this.#terrainCells[index];
@@ -193,7 +197,7 @@ export class Match {
     this.#remainingMs = Math.max(0, this.#remainingMs - delta);
     if (this.#remainingMs > 0) return true;
     if (this.#phase === "countdown") {
-      const layout = terrainLayout(this.#arena.width, this.#arena.height, this.#arena.scale);
+      const layout = this.#layout();
       const cells = this.#terrain
         ? terrainMapCells(this.#terrain)
           .filter((cell) => cell.traversable)
@@ -237,7 +241,7 @@ export class Match {
       if (this.#players.has(command.slot)) return fail("Este setor já está ocupado.");
       if ([...this.#players.values()].some((p) => p.name === command.name)) return fail(`O nome ${command.name} já está em uso.`);
       if ([...this.#players.values()].some((p) => p.color === command.color)) return fail("A cor escolhida já está em uso. Escolha outra cor.");
-      const layout = terrainLayout(this.#arena.width, this.#arena.height, this.#arena.scale);
+      const layout = this.#layout();
       this.#players.set(command.slot, {
         slot: command.slot, name: command.name, color: command.color,
         attributes: initialPlayerAttributes(), ready: false,
@@ -267,7 +271,7 @@ export class Match {
     }
     if (command.type === "move") {
       if (!player.pressed || !["lobby", "countdown", "running"].includes(this.#phase)) return fail("Movimento indisponível.");
-      const layout = terrainLayout(this.#arena.width, this.#arena.height, this.#arena.scale);
+      const layout = this.#layout();
       if (this.#phase === "running" && this.#terrain) {
         const previousTurn = this.#lastMoveSimulationTurn.get(command.slot) ?? this.#simulationTurns;
         const elapsedTurns = Math.min(
@@ -287,6 +291,7 @@ export class Match {
           this.#arena.height,
           this.#arena.scale,
           this.#blockedGateKeys,
+          this.#arena.hexSideTokenRatio,
         );
       } else {
         const radius = layout.tokenDiameter / 2;
@@ -353,6 +358,8 @@ export class Match {
             this.#arena.height,
             this.#arena.scale,
             randomUUID(),
+            undefined,
+            this.#arena.hexSideTokenRatio,
           );
           const availableCells = terrainMapCells(terrain).filter((cell) => cell.traversable).length;
           if (availableCells < this.#players.size) {
@@ -397,12 +404,17 @@ export class Match {
   #resetPreparation() {
     this.#error = "";
     this.#cancelCountdown();
-    const layout = terrainLayout(this.#arena.width, this.#arena.height, this.#arena.scale);
+    const layout = this.#layout();
     this.#players.forEach((p) => {
       p.ready = false;
       p.pressed = false;
       p.position = initialTokenPosition(p.slot, layout.area, layout.tokenDiameter);
     });
+  }
+
+  #layout() {
+    const { width, height, scale, hexSideTokenRatio } = this.#arena;
+    return terrainLayout(width, height, scale, hexSideTokenRatio);
   }
 
   #pause() {

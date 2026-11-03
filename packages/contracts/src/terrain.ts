@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { cellDimensions, terrainLayout, type Point } from "./layout.js";
+import { DEFAULT_HEX_SIDE_TOKEN_RATIO, cellDimensions, terrainLayout, type Point } from "./layout.js";
 
 export const hexDirections = [
   { q: 1, r: 0 },
@@ -14,6 +14,14 @@ const moduleCoordinates = [
   { q: 0, r: 0 },
   ...hexDirections,
 ] as const;
+
+function edgeVertices(q: number, r: number, direction: number): string[] {
+  const corners = [[1, 1], [0, 2], [-1, 1], [-1, -1], [0, -2], [1, -1]] as const;
+  return [(direction + 5) % 6, direction].map((index) => {
+    const [x, y] = corners[index]!;
+    return `${2 * q + r + x},${3 * r + y}`;
+  });
+}
 
 const identifierSchema = z.string().regex(/^[a-z][a-z0-9_-]*$/);
 const connectorSchema = identifierSchema.nullable();
@@ -98,23 +106,31 @@ export const terrainModuleSchema = z.strictObject({
   if (module.id === "abandoned-house") {
     const lostItemCells = module.cells.filter((cell) => cell.objectSlots.includes("lost-item"));
     const gates = module.cells.flatMap((cell) => cell.gates.filter((gate) => gate !== null));
-    if (lostItemCells.length !== 1 || lostItemCells[0]?.q !== 0 || lostItemCells[0]?.r !== 0
+    if (lostItemCells.length !== 1
+      || lostItemCells.some((cell) => cell.gates.some((gate) => gate === "door" || gate === "window"))
       || module.cells.some((cell) => cell.objectSlots.some((slot) => slot !== "lost-item"))) {
       context.addIssue({
         code: "custom",
         path: ["cells"],
-        message: "A casa precisa ter exatamente um receptor de item perdido na célula central.",
+        message: "A casa precisa ter exatamente um receptor de item perdido em uma célula sem porta nem janela.",
       });
     }
     if (gates.length !== 18
       || gates.filter((gate) => gate === "door").length !== 1
-      || gates.filter((gate) => gate === "window").length !== 1
-      || gates.filter((gate) => gate === "wall").length !== gates.length - 2) {
+      || gates.filter((gate) => gate === "window").length > 3) {
       context.addIssue({
         code: "custom",
         path: ["cells"],
-        message: "A casa precisa ter exatamente uma porta, uma janela e paredes nas demais bordas externas.",
+        message: "A casa precisa ter uma porta, de zero a três janelas e paredes nas demais bordas externas.",
       });
+    }
+    const doorVertices = new Set(module.cells.flatMap((cell) => cell.gates.flatMap((gate, direction) =>
+      gate === "door" ? edgeVertices(cell.q, cell.r, direction) : [],
+    )));
+    if (module.cells.some((cell) => cell.gates.some((gate, direction) =>
+      gate === "window" && edgeVertices(cell.q, cell.r, direction).some((vertex) => doorVertices.has(vertex)),
+    ))) {
+      context.addIssue({ code: "custom", path: ["cells"], message: "Uma janela nunca pode tocar na porta." });
     }
     if (module.cells.some((cell) => cell.terrainType !== "abandoned-house")) {
       context.addIssue({
@@ -168,6 +184,10 @@ const terrainModulePlacementSchema = z.strictObject({
   q: z.number().int(),
   r: z.number().int(),
   rotation: z.number().int().min(0).max(5),
+  houseLayout: terrainModuleSchema.optional(),
+}).refine((placement) => !placement.houseLayout
+  || (placement.id === "abandoned-house" && placement.houseLayout.id === placement.id), {
+  message: "Somente a casa abandonada pode ter uma disposição interna sorteada.",
 });
 
 export const generatedTerrainMapSchema = z.strictObject({
@@ -210,8 +230,10 @@ export function movementMultiplier(dexterity: number): number {
   return 1 + (level - 1) * 0.1;
 }
 
-function axialFromPoint(point: Point, width: number, height: number, scale: number) {
-  const dimensions = cellDimensions(scale);
+function axialFromPoint(
+  point: Point, width: number, height: number, scale: number, hexSideTokenRatio: number,
+) {
+  const dimensions = cellDimensions(scale, hexSideTokenRatio);
   const fractionalR = (point.y - height / 2) / (dimensions.radius * 1.5);
   const fractionalQ = (point.x - width / 2) / dimensions.width - fractionalR / 2;
   const fractionalS = -fractionalQ - fractionalR;
@@ -233,12 +255,13 @@ export function visibleTerrainCellIndices(
   height: number,
   scale: number,
   radius: number,
+  hexSideTokenRatio = DEFAULT_HEX_SIDE_TOKEN_RATIO,
 ): number[] {
   z.number().int().min(1).max(12).parse(radius);
   const byCoordinate = new Map(cells.map((cell, index) => [`${cell.q},${cell.r}`, index]));
   const visible = new Set<number>();
   for (const player of players) {
-    const center = axialFromPoint(player.position, width, height, scale);
+    const center = axialFromPoint(player.position, width, height, scale, hexSideTokenRatio);
     for (let qOffset = -radius; qOffset <= radius; qOffset++) {
       const minimumROffset = Math.max(-radius, -qOffset - radius);
       const maximumROffset = Math.min(radius, -qOffset + radius);
@@ -260,10 +283,11 @@ export function moveWithinTerrain(
   height: number,
   scale: number,
   blockedGates: ReadonlySet<string> = new Set(),
+  hexSideTokenRatio = DEFAULT_HEX_SIDE_TOKEN_RATIO,
 ): Point {
   z.number().nonnegative().finite().parse(maxDistance);
-  const layout = terrainLayout(width, height, scale);
-  const dimensions = cellDimensions(scale);
+  const layout = terrainLayout(width, height, scale, hexSideTokenRatio);
+  const dimensions = cellDimensions(scale, hexSideTokenRatio);
   const radius = dimensions.tokenDiameter / 2;
   const target = {
     x: Math.max(layout.area.x + radius, Math.min(layout.area.x + layout.area.width - radius, requested.x)),
@@ -279,7 +303,7 @@ export function moveWithinTerrain(
     y: start.y + deltaY * fraction,
   };
   const byCoordinate = new Map(cells.map((cell) => [`${cell.q},${cell.r}`, cell]));
-  let previous = axialFromPoint(start, width, height, scale);
+  let previous = axialFromPoint(start, width, height, scale, hexSideTokenRatio);
   if (!byCoordinate.get(`${previous.q},${previous.r}`)?.traversable) return { ...start };
   const sampleDistance = dimensions.width / 16;
   const steps = Math.max(1, Math.ceil(Math.hypot(destination.x - start.x, destination.y - start.y) / sampleDistance));
@@ -289,7 +313,7 @@ export function moveWithinTerrain(
       x: start.x + (destination.x - start.x) * step / steps,
       y: start.y + (destination.y - start.y) * step / steps,
     };
-    const next = axialFromPoint(point, width, height, scale);
+    const next = axialFromPoint(point, width, height, scale, hexSideTokenRatio);
     if (next.q !== previous.q || next.r !== previous.r) {
       const direction = hexDirections.findIndex(({ q, r }) => q === next.q - previous.q && r === next.r - previous.r);
       const fromCell = byCoordinate.get(`${previous.q},${previous.r}`);
@@ -469,6 +493,29 @@ function shuffled<T>(values: T[], random: () => number): T[] {
   return result;
 }
 
+function randomizeHouse(module: TerrainModule, random: () => number): TerrainModule {
+  const cells = structuredClone(module.cells);
+  const doorVertices = new Set(cells.flatMap((cell) => cell.gates.flatMap((gate, direction) =>
+    gate === "door" ? edgeVertices(cell.q, cell.r, direction) : [],
+  )));
+  const candidates = cells.flatMap((cell) => {
+    cell.objectSlots = [];
+    return cell.gates.flatMap((gate, direction) => {
+      if (gate === "window") cell.gates[direction] = "wall";
+      if (gate !== "wall" && gate !== "window") return [];
+      return edgeVertices(cell.q, cell.r, direction).some((vertex) => doorVertices.has(vertex))
+        ? [] : [{ cell, direction }];
+    });
+  });
+  const windowCount = Math.floor(random() * 4);
+  for (const { cell, direction } of shuffled(candidates, random).slice(0, windowCount)) {
+    cell.gates[direction] = "window";
+  }
+  const itemCells = cells.filter((cell) => !cell.gates.some((gate) => gate === "door" || gate === "window"));
+  itemCells[Math.floor(random() * itemCells.length)]!.objectSlots = ["lost-item"];
+  return terrainModuleSchema.parse({ ...module, cells });
+}
+
 function placementOrigin(placement: { cells: { q: number; r: number }[] }) {
   return {
     q: Math.round(placement.cells.reduce((sum, cell) => sum + cell.q, 0) / placement.cells.length),
@@ -482,10 +529,11 @@ export function generateTerrainMap(
   scale: number,
   seed: string,
   catalog: TerrainModule[] = STARTER_TERRAIN_MODULES,
+  hexSideTokenRatio = DEFAULT_HEX_SIDE_TOKEN_RATIO,
 ): GeneratedTerrainMap {
-  const modules = terrainModuleCatalogSchema.parse(catalog);
+  const validatedCatalog = terrainModuleCatalogSchema.parse(catalog);
   z.string().min(1).max(128).parse(seed);
-  const layout = terrainLayout(width, height, scale);
+  const layout = terrainLayout(width, height, scale, hexSideTokenRatio);
   if (layout.placements.length === 0) return generatedTerrainMapSchema.parse({ seed, modules: [] });
 
   const origins = layout.placements.map(placementOrigin);
@@ -532,10 +580,13 @@ export function generateTerrainMap(
   );
   const mainComponent = components[0]!;
   const mainComponentSet = new Set(mainComponent);
-  const root = mainComponent.reduce((best, index) =>
+  let root = mainComponent.reduce((best, index) =>
     distanceToCenter(index) < distanceToCenter(best) ? index : best,
   );
   const random = seededRandom(seed);
+  const modules = validatedCatalog.map((module) =>
+    module.id === "abandoned-house" ? randomizeHouse(module, random) : module,
+  );
   const order: number[] = [];
   const orderQueue = [root];
   const ordered = new Set([root]);
@@ -571,20 +622,62 @@ export function generateTerrainMap(
   const clearing = modules.find((module) => module.id === "clearing") ?? modules[0]!;
   const pathConnector = modules.find((module) => module.id === "path-connector");
   const abandonedHouse = modules.find((module) => module.id === "abandoned-house");
-  if (abandonedHouse && order.length < 3) {
-    return generatedTerrainMapSchema.parse({ seed, modules: [] });
+  let housePlacement: { index: number; variant: number; paths: number[] } | undefined;
+  if (abandonedHouse) {
+    if (!pathConnector) throw new Error("A casa precisa de um módulo de trilha para ligar suas passagens ao mapa.");
+    const houseVariants = variants.flatMap(({ id }, index) => id === abandonedHouse.id ? [index] : []);
+    for (const index of shuffled(order, random)) {
+      // Keep the exterior connected independently of the house's closed passages.
+      const exteriorRoot = order.find((candidate) => candidate !== index);
+      if (exteriorRoot === undefined) continue;
+      const exterior = new Set([exteriorRoot]);
+      const queue = [exteriorRoot];
+      for (let cursor = 0; cursor < queue.length; cursor++) {
+        for (const neighbor of neighbors[queue[cursor]!]!) {
+          if (neighbor === index || exterior.has(neighbor)) continue;
+          exterior.add(neighbor);
+          queue.push(neighbor);
+        }
+      }
+      if (exterior.size !== order.length - 1) continue;
+      const origin = origins[index]!;
+      for (const variantIndex of shuffled(houseVariants, random)) {
+        const house = variants[variantIndex]!.module;
+        const paths: number[] = [];
+        let valid = true;
+        for (const cell of house.cells) {
+          for (const [direction, gate] of cell.gates.entries()) {
+            if (gate !== "door") continue;
+            const offset = hexDirections[direction]!;
+            const owner = cellOwners.get(`${origin.q + cell.q + offset.q},${origin.r + cell.r + offset.r}`);
+            if (owner === undefined || !exterior.has(owner)) valid = false;
+            else paths.push(owner);
+          }
+        }
+        if (valid && paths.length === 1) {
+          housePlacement = { index, variant: variantIndex, paths };
+          break;
+        }
+      }
+      if (housePlacement) break;
+    }
+    if (!housePlacement) return generatedTerrainMapSchema.parse({ seed, modules: [] });
+    if (housePlacement.index === root) {
+      const houseIndex = housePlacement.index;
+      root = order.find((index) => index !== houseIndex)!;
+      order.splice(order.indexOf(root), 1);
+      order.unshift(root);
+    }
   }
-  for (const [orderIndex, index] of order.entries()) {
+  for (const index of order) {
     const attached = [...neighbors[index]!].filter((neighbor) => placed.has(neighbor));
-    const candidates = variants.flatMap(({ id }, variantIndex) =>
-      index !== root || id === clearing.id ? [variantIndex] : [],
-    ).filter((variantIndex) =>
-      orderIndex !== 1 || !pathConnector || variants[variantIndex]!.id === pathConnector.id,
-    ).filter((variantIndex) =>
-      orderIndex !== 2 || !abandonedHouse || variants[variantIndex]!.id === abandonedHouse.id,
-    ).filter((variantIndex) =>
-      orderIndex <= 2 || !abandonedHouse || variants[variantIndex]!.id !== abandonedHouse.id,
-    ).filter((variantIndex) => attached.every((neighbor) => {
+    const candidates = variants.flatMap(({ id }, variantIndex) => {
+      if (index === root) return id === clearing.id ? [variantIndex] : [];
+      if (index === housePlacement?.index) return variantIndex === housePlacement.variant ? [variantIndex] : [];
+      if (id === abandonedHouse?.id) return [];
+      if (housePlacement?.paths.includes(index)) return id === pathConnector?.id ? [variantIndex] : [];
+      return [variantIndex];
+    }).filter((variantIndex) => attached.every((neighbor) => {
         const origin = origins[index]!;
         const parentOrigin = origins[neighbor]!;
         return connects(
@@ -601,7 +694,10 @@ export function generateTerrainMap(
 
   const placements = order.map((index) => {
     const variant = variants[placed.get(index)!]!;
-    return { id: variant.id, ...origins[index]!, rotation: variant.rotation };
+    return {
+      id: variant.id, ...origins[index]!, rotation: variant.rotation,
+      ...(variant.id === "abandoned-house" ? { houseLayout: abandonedHouse } : {}),
+    };
   });
   const doorStates = placements.flatMap((placement) => {
     const module = modules.find(({ id }) => id === placement.id);
@@ -616,11 +712,13 @@ export function generateTerrainMap(
     );
   });
 
-  return generatedTerrainMapSchema.parse({
+  const map = generatedTerrainMapSchema.parse({
     seed,
     modules: placements,
     doorStates,
   });
+  terrainMapCells(map, modules);
+  return map;
 }
 
 export function terrainMapCells(
@@ -630,19 +728,34 @@ export function terrainMapCells(
   const validatedMap = generatedTerrainMapSchema.parse(map);
   const byId = new Map(terrainModuleCatalogSchema.parse(catalog).map((module) => [module.id, module]));
   const cells = validatedMap.modules.flatMap((placement) => {
-    const module = byId.get(placement.id);
-    if (!module) throw new Error(`O módulo ${placement.id} não existe no catálogo de terrenos.`);
+    const template = byId.get(placement.id);
+    if (!template) throw new Error(`O módulo ${placement.id} não existe no catálogo de terrenos.`);
+    const module = placement.houseLayout ?? template;
     return rotateTerrainModule(module, placement.rotation).cells.map((cell) => ({
       ...cell,
       q: cell.q + placement.q,
       r: cell.r + placement.r,
     }));
   });
-  const coordinates = new Set<string>();
+  const coordinates = new Map<string, TerrainModuleCell>();
   for (const cell of cells) {
     const key = `${cell.q},${cell.r}`;
     if (coordinates.has(key)) throw new Error("O mapa gerado contém células sobrepostas.");
-    coordinates.add(key);
+    coordinates.set(key, cell);
+  }
+  for (const cell of cells) {
+    for (const [direction, gate] of cell.gates.entries()) {
+      if (gate !== "door") continue;
+      const offset = hexDirections[direction]!;
+      const neighbor = coordinates.get(`${cell.q + offset.q},${cell.r + offset.r}`);
+      const reverse = (direction + 3) % 6;
+      if (!cell.traversable || !neighbor?.traversable
+        || cell.connectors[direction] === null
+        || cell.connectors[direction] !== neighbor.connectors[reverse]
+        || neighbor.gates[reverse] !== null) {
+        throw new Error("Toda porta precisa de um caminho externo transitável com encaixe recíproco.");
+      }
+    }
   }
   return cells;
 }

@@ -192,16 +192,13 @@ test("terrain module rotations preserve cell capabilities and rotate connectors 
   assert.throws(() => rotateTerrainModule(module, 6));
 });
 
-test("the abandoned house has one lost-item slot, one door, one window and otherwise solid walls", () => {
+test("the house validates one item away from passages and zero to three windows never touching its door", () => {
   const house = STARTER_TERRAIN_MODULES.find(({ id }) => id === "abandoned-house");
   assert.ok(house);
   assert.equal(terrainModuleSchema.safeParse(house).success, true);
   assert.equal(house.cells.filter(({ objectSlots }) => objectSlots.includes("lost-item")).length, 1);
-  assert.deepEqual(
-    house.cells.filter(({ objectSlots }) => objectSlots.includes("lost-item"))
-      .map(({ q, r }) => ({ q, r })),
-    [{ q: 0, r: 0 }],
-  );
+  assert.ok(house.cells.filter(({ objectSlots }) => objectSlots.includes("lost-item"))
+    .every(({ gates }) => !gates.includes("door") && !gates.includes("window")));
   assert.deepEqual(
     ["door", "window", "wall"].map((kind) =>
       house.cells.flatMap(({ gates }) => gates).filter((gate) => gate === kind).length),
@@ -245,6 +242,83 @@ test("the abandoned house has one lost-item slot, one door, one window and other
     }),
   };
   assert.equal(terrainModuleSchema.safeParse(missingWall).success, false);
+  for (const cell of house.cells.filter(({ gates }) => !gates.includes("door") && !gates.includes("window"))) {
+    assert.equal(terrainModuleSchema.safeParse({
+      ...house,
+      cells: house.cells.map((candidate) => ({
+        ...candidate, objectSlots: candidate === cell ? ["lost-item"] : [],
+      })),
+    }).success, true);
+  }
+  for (const cell of [doorCell, windowCell]) {
+    assert.equal(terrainModuleSchema.safeParse({
+      ...house,
+      cells: house.cells.map((candidate) => ({
+        ...candidate, objectSlots: candidate === cell ? ["lost-item"] : [],
+      })),
+    }).success, false);
+  }
+  const withoutWindows = {
+    ...house,
+    cells: house.cells.map((cell) => ({
+      ...cell, gates: cell.gates.map((gate) => gate === "window" ? "wall" : gate),
+    })),
+  };
+  assert.equal(terrainModuleSchema.safeParse(withoutWindows).success, true);
+  for (const direction of [1, 5]) {
+    const touchingDoor = {
+      ...withoutWindows,
+      cells: withoutWindows.cells.map((cell) => ({
+        ...cell,
+        gates: cell.gates.map((gate, index) =>
+          cell.q === 1 && cell.r === 0 && index === direction ? "window" : gate),
+      })),
+    };
+    assert.equal(terrainModuleSchema.safeParse(touchingDoor).success, false);
+  }
+  const touchingAcrossCells = {
+    ...withoutWindows,
+    cells: withoutWindows.cells.map((cell) => ({
+      ...cell,
+      gates: cell.gates.map((gate, direction) => {
+        if (cell.q === 1 && cell.r === 0 && direction === 0) return "wall";
+        if (cell.q === 1 && cell.r === 0 && direction === 1) return "door";
+        if (cell.q === 0 && cell.r === 1 && direction === 0) return "window";
+        return gate;
+      }),
+    })),
+  };
+  assert.equal(terrainModuleSchema.safeParse(touchingAcrossCells).success, false);
+  const tooManyWindows = {
+    ...withoutWindows,
+    cells: withoutWindows.cells.map((cell) => ({
+      ...cell,
+      gates: cell.gates.map((gate) => gate === "wall" && cell.q <= 0 ? "window" : gate),
+    })),
+  };
+  assert.equal(terrainModuleSchema.safeParse(tooManyWindows).success, false);
+});
+
+test("a house window may face missing terrain while its door must have a reciprocal path", () => {
+  const map = {
+    seed: "outward-window",
+    modules: [
+      { id: "abandoned-house", q: 0, r: 0, rotation: 0 },
+      { id: "clearing", q: 2, r: 1, rotation: 0 },
+    ],
+    doorStates: [],
+  };
+  const cells = terrainMapCells(map);
+  const window = cells.find((cell) => cell.gates.includes("window"))!;
+  const offset = hexDirections[window.gates.indexOf("window")]!;
+  assert.equal(cells.some((cell) => cell.q === window.q + offset.q && cell.r === window.r + offset.r), false);
+  assert.throws(() => terrainMapCells({
+    ...map, modules: [map.modules[0]!],
+  }), /porta.*caminho externo/);
+  assert.equal(generatedTerrainMapSchema.safeParse({
+    ...map,
+    modules: [{ ...map.modules[1]!, houseLayout: STARTER_TERRAIN_MODULES.find(({ id }) => id === "abandoned-house") }],
+  }).success, false);
 });
 
 test("terrain modules only connect through matching reciprocal boundary connectors", () => {
@@ -281,9 +355,7 @@ test("seeded terrain generation fits whole connected modules and expands to uniq
   assert.equal(first.modules[0]?.id, "clearing");
   assert.ok(first.modules.length > 1);
   assert.equal(first.modules.filter(({ id }) => id === "abandoned-house").length, 1);
-  assert.deepEqual(first.modules.slice(0, 3).map(({ id }) => id), [
-    "clearing", "path-connector", "abandoned-house",
-  ]);
+  assert.ok(first.modules.some(({ id }) => id === "path-connector"));
   assert.equal(first.doorStates.length, 1);
   assert.ok(["open", "closed"].includes(first.doorStates[0]!.state));
   assert.deepEqual(first.doorStates, repeated.doorStates);
@@ -422,17 +494,127 @@ test("HTTP parsing surfaces server errors and rejects invalid successful respons
   await assert.rejects(parseApiResponse(new Response("{}"), settingsSchema), /incompatíveis/);
 });
 
-test("token and clearance scale proportionally inside the hexagon's incircle", () => {
+test("all six hexagon sides are at least 1.2 token diameters at every scale", () => {
   for (const scale of [0.5, 1, 1.5, 2]) {
-    const dimensions = cellDimensions(scale);
-    assert.equal(dimensions.tokenDiameter, 64 * scale);
-    assert.equal(dimensions.clearance, 8 * scale);
-    assert.equal(dimensions.width, 80 * scale);
-    assert.ok(Math.abs(dimensions.radius * Math.sqrt(3) / 2
-      - dimensions.tokenDiameter / 2 - dimensions.clearance) < 1e-7);
+    for (const ratio of [1.2, 1.5, 2]) {
+      const dimensions = cellDimensions(scale, ratio);
+      assert.equal(dimensions.tokenDiameter, 64 * scale);
+      assert.equal(dimensions.side, ratio * dimensions.tokenDiameter);
+      const corners = hexCorners({ x: 0, y: 0 }, dimensions.radius);
+      for (let direction = 0; direction < 6; direction++) {
+        const from = corners[direction]!;
+        const to = corners[(direction + 1) % 6]!;
+        assert.ok(Math.abs(Math.hypot(to.x - from.x, to.y - from.y) - dimensions.side) < 1e-7);
+      }
+      assert.ok(Math.abs(dimensions.width - Math.sqrt(3) * dimensions.side) < 1e-7);
+      assert.ok(Math.abs(dimensions.width / 2 - dimensions.tokenDiameter / 2 - dimensions.clearance) < 1e-7);
+    }
   }
   assert.throws(() => cellDimensions(0));
   assert.throws(() => cellDimensions(Infinity));
+  assert.throws(() => cellDimensions(1, 1.19));
+  assert.throws(() => cellDimensions(1, Infinity));
+});
+
+test("random houses keep doors connected, windows away from doors and items away from all passages", () => {
+  const rotations = new Set<number>();
+  const doorStates = new Set<string>();
+  const windowCounts = new Set<number>();
+  const itemPositions = new Set<string>();
+  let outwardWindow = false;
+  let touchingWindows = false;
+  for (const [width, height, scale, ratio, supported] of [
+    [1920, 1200, 1, 1.2, true], [1200, 1920, 1, 1.2, true], [1920, 1200, 0.5, 1.5, true],
+    [1920, 1200, 1.5, 1.2, true], [320, 320, 2, 1.2, false],
+  ] as const) {
+    for (let seed = 0; seed < 64; seed++) {
+      const map = generateTerrainMap(width, height, scale, `exit-${seed}`, undefined, ratio);
+      assert.equal(map.modules.length > 0, supported);
+      if (!supported) continue;
+      const house = map.modules.find(({ id }) => id === "abandoned-house")!;
+      assert.ok(house.houseLayout);
+      const lostItem = house.houseLayout.cells.filter(({ objectSlots }) => objectSlots.includes("lost-item"));
+      assert.equal(lostItem.length, 1);
+      assert.ok(lostItem.every(({ gates }) => !gates.includes("door") && !gates.includes("window")));
+      itemPositions.add(`${lostItem[0]!.q},${lostItem[0]!.r}`);
+      rotations.add(house.rotation);
+      doorStates.add(map.doorStates[0]!.state);
+      const cells = terrainMapCells(map);
+      assert.deepEqual(terrainMapCells(JSON.parse(JSON.stringify(map))), cells);
+      const dimensions = cellDimensions(scale, ratio);
+      const point = ({ q, r }: { q: number; r: number }) => ({
+        x: width / 2 + dimensions.width * (q + r / 2),
+        y: height / 2 + dimensions.radius * 1.5 * r,
+      });
+      const edges = cells.flatMap((cell) => cell.gates.flatMap((gate, direction) => {
+        if (gate !== "door" && gate !== "window") return [];
+        const corners = hexCorners(point(cell), dimensions.radius);
+        return [{ gate, points: [corners[(direction + 5) % 6]!, corners[direction]!] }];
+      }));
+      const door = edges.find(({ gate }) => gate === "door")!;
+      const windows = edges.filter(({ gate }) => gate === "window");
+      windowCounts.add(windows.length);
+      const touching = (first: typeof door, second: typeof door) => first.points.some((a) =>
+        second.points.some((b) => Math.hypot(a.x - b.x, a.y - b.y) < 1e-7));
+      assert.ok(windows.every((window) => !touching(door, window)));
+      touchingWindows ||= windows.some((window, index) =>
+        windows.slice(index + 1).some((other) => touching(window, other)));
+      const exteriorCells = cells.filter(({ terrainType }) => terrainType !== "abandoned-house");
+      const exterior = new Map(exteriorCells.map((cell) => [`${cell.q},${cell.r}`, cell]));
+      const root = exteriorCells.find(({ q, r }) => q === map.modules[0]!.q && r === map.modules[0]!.r)!;
+      const reached = new Set([`${root.q},${root.r}`]);
+      const queue = [root];
+      for (let cursor = 0; cursor < queue.length; cursor++) {
+        const cell = queue[cursor]!;
+        for (const [direction, offset] of hexDirections.entries()) {
+          const key = `${cell.q + offset.q},${cell.r + offset.r}`;
+          const neighbor = exterior.get(key);
+          if (!neighbor?.traversable || reached.has(key) || cell.connectors[direction] === null
+            || cell.connectors[direction] !== neighbor.connectors[(direction + 3) % 6]) continue;
+          reached.add(key);
+          queue.push(neighbor);
+        }
+      }
+      assert.equal(reached.size, exteriorCells.filter(({ traversable }) => traversable).length);
+      for (const cell of cells) {
+        for (const [direction, gate] of cell.gates.entries()) {
+          if (gate !== "door" && gate !== "window") continue;
+          const offset = hexDirections[direction]!;
+          const neighbor = exterior.get(`${cell.q + offset.q},${cell.r + offset.r}`);
+          if (gate === "window") {
+            outwardWindow ||= !neighbor;
+            continue;
+          }
+          assert.ok(neighbor?.traversable, `${gate} must not face an empty map edge`);
+          assert.ok(reached.has(`${neighbor.q},${neighbor.r}`));
+          assert.equal(cell.connectors[direction], neighbor.connectors[(direction + 3) % 6]);
+          assert.equal(neighbor.gates[(direction + 3) % 6], null);
+          const start = point(cell);
+          const target = point(neighbor);
+          assert.deepEqual(
+            moveWithinTerrain(cells, start, target, dimensions.width * 2, width, height, scale, new Set(), ratio),
+            target,
+          );
+          const blocked = new Set([`${cell.q},${cell.r},${direction}`]);
+          assert.notDeepEqual(
+            moveWithinTerrain(cells, start, target, dimensions.width * 2, width, height, scale, blocked, ratio),
+            target,
+          );
+        }
+      }
+    }
+  }
+  assert.equal(rotations.size, 6);
+  assert.deepEqual([...doorStates].sort(), ["closed", "open"]);
+  assert.deepEqual([...windowCounts].sort(), [0, 1, 2, 3]);
+  assert.equal(itemPositions.size, 6);
+  assert.equal(outwardWindow, true);
+  assert.equal(touchingWindows, true);
+  assert.throws(() => terrainMapCells({
+    seed: "isolated-house",
+    modules: [{ id: "abandoned-house", q: 0, r: 0, rotation: 0 }],
+    doorStates: [],
+  }), /caminho externo/);
 });
 
 test("whole seven-cell terrains fit the usable area without overlap or clipping", () => {

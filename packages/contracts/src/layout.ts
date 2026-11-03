@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 export const BASE_TOKEN_DIAMETER = 64;
-export const BASE_CELL_CLEARANCE = 8;
+export const DEFAULT_HEX_SIDE_TOKEN_RATIO = 1.2;
+export const hexSideTokenRatioSchema = z.number().finite().min(1.2);
 const sqrt3 = Math.sqrt(3);
 
 export interface Point { x: number; y: number }
@@ -16,13 +17,14 @@ const offsets: Axial[] = [
   { q: -1, r: 1 }, { q: -1, r: 0 }, { q: 0, r: -1 }, { q: 1, r: -1 },
 ];
 
-export function cellDimensions(scale: number) {
+export function cellDimensions(scale: number, hexSideTokenRatio = DEFAULT_HEX_SIDE_TOKEN_RATIO) {
   z.number().positive().finite().parse(scale);
+  hexSideTokenRatioSchema.parse(hexSideTokenRatio);
   const tokenDiameter = BASE_TOKEN_DIAMETER * scale;
-  const clearance = BASE_CELL_CLEARANCE * scale;
-  const width = tokenDiameter + 2 * clearance;
-  const radius = width / sqrt3;
-  return { tokenDiameter, clearance, width, radius, height: 2 * radius };
+  const side = tokenDiameter * hexSideTokenRatio;
+  const width = side * sqrt3;
+  const clearance = (width - tokenDiameter) / 2;
+  return { tokenDiameter, clearance, side, width, radius: side, height: 2 * side };
 }
 
 export function hexCorners(center: Point, radius: number): Point[] {
@@ -68,10 +70,12 @@ export function boardArea(width: number, height: number, scale = 1) {
   };
 }
 
-export function terrainLayout(width: number, height: number, scale: number) {
+export function terrainLayout(
+  width: number, height: number, scale: number, hexSideTokenRatio = DEFAULT_HEX_SIDE_TOKEN_RATIO,
+) {
   z.number().nonnegative().finite().parse(width);
   z.number().nonnegative().finite().parse(height);
-  const dimensions = cellDimensions(scale);
+  const dimensions = cellDimensions(scale, hexSideTokenRatio);
   const area = boardArea(width, height, scale);
   const origin = { x: width / 2, y: height / 2 };
   const toPixel = ({ q, r }: Axial): Point => ({

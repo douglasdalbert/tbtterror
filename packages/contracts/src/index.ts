@@ -1,9 +1,11 @@
 import { z } from "zod";
 import { playerColorSchema } from "./playerColors.js";
 import { movementSpeedSchema, turnDurationSchema } from "./terrain.js";
+import { DEFAULT_HEX_SIDE_TOKEN_RATIO, hexSideTokenRatioSchema } from "./layout.js";
 
 export { parseApiResponse } from "./http.js";
 export { boardArea, cellDimensions, hexCorners, playerSectorDepth, terrainLayout, tokenHitCircle, initialTokenPosition } from "./layout.js";
+export { DEFAULT_HEX_SIDE_TOKEN_RATIO, hexSideTokenRatioSchema } from "./layout.js";
 export {
   BASE_MOVEMENT_CELLS_PER_TURN, DEFAULT_TURN_DURATION_MS, movementSpeedSchema, turnDurationSchema,
   generateTerrainMap, generatedTerrainMapSchema, hexDirections,
@@ -108,6 +110,7 @@ export const arenaSchema = z.strictObject({
   width: z.number().finite().min(320).max(7680),
   height: z.number().finite().min(320).max(7680),
   scale: z.number().min(0.5).max(2),
+  hexSideTokenRatio: hexSideTokenRatioSchema.default(DEFAULT_HEX_SIDE_TOKEN_RATIO),
 });
 export const pointSchema = z.strictObject({ x: z.number().finite(), y: z.number().finite() });
 export const matchPlayerSchema = z.strictObject({

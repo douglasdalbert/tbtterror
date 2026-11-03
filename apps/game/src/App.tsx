@@ -36,6 +36,8 @@ export function App() {
   const catalogMatchId = useRef("");
   const scale = snapshot?.arena.scale ?? 1;
   const configuring = !snapshot || snapshot.phase === "lobby" || snapshot.phase === "countdown";
+  const showCentralPanel = configuring || snapshot.phase === "paused";
+  const showCentralWarning = !!error || !!snapshot?.error || connection !== "connected";
   const [hintIndex, setHintIndex] = useState(0);
   const audioContext = useRef<AudioContext | null>(null);
 
@@ -222,11 +224,12 @@ export function App() {
           />
         ); })}
       </section>
-      <div className="preparation-center">
+      {(showCentralPanel || showCentralWarning || snapshot?.phase === "chapter") && <div className="preparation-center">
         {configuring && <PreparationTips hintIndex={hintIndex} />}
+        {(showCentralPanel || showCentralWarning) && (
         <section className="status" aria-live="polite">
           <div className="status-heading">
-            <h1>Terror</h1>
+            {showCentralPanel && <h1>Terror</h1>}
             <span
               className={`connection-indicator connection-indicator--${error ? "error" : connection}`}
               role="status"
@@ -236,18 +239,21 @@ export function App() {
           </div>
           {error && <p role="alert" className="error">{error}</p>}
           {snapshot?.error && <p role="alert" className="error">{snapshot.error}</p>}
-          {snapshot && catalog && (
+          {showCentralPanel && snapshot && catalog && (
             <p>{configuring ? "Preparação" : snapshot.phase === "paused" ? "Pausado" : "Partida"} · {snapshot.players.length}/8 jogadores</p>
           )}
           {snapshot?.phase === "countdown" && <output className="countdown" aria-label="Contagem para início">{Math.ceil(snapshot.remainingMs / 1000)}</output>}
           {snapshot?.phase === "paused" && snapshot.resumeRemainingMs > 0 &&
             <output className="countdown" aria-label="Contagem para retomada">{Math.ceil(snapshot.resumeRemainingMs / 1000)}</output>}
-          {(snapshot?.phase === "chapter" || (snapshot?.phase === "paused" && snapshot.remainingMs > 0)) &&
+          {snapshot?.phase === "paused" && snapshot.remainingMs > 0 &&
             <p className="chapter-title" style={{ opacity: Math.min(1, snapshot.remainingMs / 1000) }}>{snapshot.chapter}</p>}
-          {!isProduction && layout && <p className="note preview-summary">Prévia · {layout.cells} células exploradas · token {Math.round(layout.tokenDiameter)} px</p>}
-          {layout?.capacity === 0 && <p role="alert" className="error">Não cabe um terreno completo nesta escala.</p>}
+          {showCentralPanel && !isProduction && layout && <p className="note preview-summary">Prévia · {layout.cells} células exploradas · token {Math.round(layout.tokenDiameter)} px</p>}
+          {showCentralPanel && layout?.capacity === 0 && <p role="alert" className="error">Não cabe um terreno completo nesta escala.</p>}
         </section>
-      </div>
+        )}
+        {snapshot?.phase === "chapter" &&
+          <p className="chapter-title" aria-live="polite" style={{ opacity: Math.min(1, snapshot.remainingMs / 1000) }}>{snapshot.chapter}</p>}
+      </div>}
       {(!fullscreen || !audioReady) && (
         <div className="immersive-overlay">
           <TouchButton className="immersive-button" onPress={() => void activateImmersiveMode()}>

@@ -5,6 +5,7 @@ try {
   await writeFile(new URL("../.env", import.meta.url), [
     `POSTGRES_PASSWORD=${randomBytes(32).toString("hex")}`,
     "GAME_PORT=8080",
+    "HEX_SIDE_TOKEN_RATIO=1.2",
     "TURN_DURATION_MS=1000",
     "BASE_MOVEMENT_CELLS_PER_TURN=0.5",
     "NODE_ENV=development",

@@ -27,8 +27,9 @@
   servidor. Não transmitir dados ocultos só para escondê-los no cliente.
 - Pelo menos dez toques simultâneos; escala interna compartilhada para tokens
   e terrenos. Não usar zoom do navegador nem assumir resolução CSS fixa.
-- Token base máximo de 64 pixels CSS com indicadores internos; folga de 8 px
-  por lado; célula com 80 px entre lados opostos. Multiplicar tudo pela escala.
+- Token base máximo de 64 pixels CSS com indicadores internos; cada lado do
+  hexágono mede `HEX_SIDE_TOKEN_RATIO` vezes o diâmetro (padrão/mínimo 1,2).
+  Multiplicar tudo pela escala compartilhada.
 - Admin local sem login/token por decisão do projeto. Manter container opcional,
   bind local por padrão e documentar que a API também fica acessível na LAN.
 - Módulos com sete hexágonos e rotações de 60°. Validar encaixes e possibilidade

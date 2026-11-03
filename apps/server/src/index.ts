@@ -16,6 +16,7 @@ try {
     config.PLAYER_VISION_RADIUS_CELLS,
     config.BASE_MOVEMENT_CELLS_PER_TURN,
     config.TURN_DURATION_MS,
+    config.HEX_SIDE_TOKEN_RATIO,
   );
   const application = createApplication(pool, match);
   await new Promise<void>((resolve, reject) => {
