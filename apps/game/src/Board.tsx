@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import Phaser from "phaser";
 import {
-  boardArea, cellDimensions, hexCorners, movementMultiplier, terrainLayout, tokenHitCircle,
+  BASE_MOVEMENT_CELLS_PER_SECOND, boardArea, cellDimensions, hexCorners,
+  movementMultiplier, terrainLayout, tokenHitCircle,
   initialTokenPosition, PLAYER_COLORS,
   type PublicCatalog, type MatchSnapshot, type MatchCommand, type PlayerColor,
 } from "@terror/contracts";
@@ -138,7 +139,9 @@ class TerrainPreviewScene extends Phaser.Scene {
     const deltaX = requested.x - current.x;
     const deltaY = requested.y - current.y;
     const distance = Math.hypot(deltaX, deltaY);
-    const maxDistance = layout.width * 0.5 * movementMultiplier(dexterity) * elapsed / 1000;
+    const baseMovementSpeed = this.#snapshot?.baseMovementCellsPerSecond
+      ?? BASE_MOVEMENT_CELLS_PER_SECOND;
+    const maxDistance = layout.width * baseMovementSpeed * movementMultiplier(dexterity) * elapsed / 1000;
     const fraction = this.#snapshot?.phase === "running" && distance > maxDistance && distance > 0
       ? maxDistance / distance
       : 1;

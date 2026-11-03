@@ -1,3 +1,4 @@
+import { BASE_MOVEMENT_CELLS_PER_SECOND, movementSpeedSchema } from "@terror/contracts";
 import { z } from "zod";
 
 const secretSchema = z.string().min(32).refine(
@@ -13,6 +14,8 @@ const configSchema = z.object({
   POSTGRES_PASSWORD: secretSchema,
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   PLAYER_VISION_RADIUS_CELLS: z.coerce.number().int().min(1).max(12).default(3),
+  BASE_MOVEMENT_CELLS_PER_SECOND: z.coerce.number().pipe(movementSpeedSchema)
+    .default(BASE_MOVEMENT_CELLS_PER_SECOND),
 });
 
 export function readConfig(environment: NodeJS.ProcessEnv) {

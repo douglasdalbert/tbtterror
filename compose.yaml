@@ -28,6 +28,7 @@ services:
       POSTGRES_USER: terror
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run npm run setup:env first}
       PLAYER_VISION_RADIUS_CELLS: ${PLAYER_VISION_RADIUS_CELLS:-3}
+      BASE_MOVEMENT_CELLS_PER_SECOND: ${BASE_MOVEMENT_CELLS_PER_SECOND:-0.5}
     depends_on:
       postgres:
         condition: service_healthy

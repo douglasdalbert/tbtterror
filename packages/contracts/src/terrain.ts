@@ -155,6 +155,7 @@ export type TerrainModule = z.infer<typeof terrainModuleSchema>;
 export type GeneratedTerrainMap = z.infer<typeof generatedTerrainMapSchema>;
 
 export const BASE_MOVEMENT_CELLS_PER_SECOND = 0.5;
+export const movementSpeedSchema = z.number().positive().finite();
 
 export function movementMultiplier(dexterity: number): number {
   const level = z.number().int().min(1).max(3).parse(dexterity);

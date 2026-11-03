@@ -33,13 +33,15 @@ A etapa 4 tem quatro módulos iniciais tipados e geração determinística por s
 com encaixes conectados, rotações de 60° e dimensionamento pela área útil e
 escala. O servidor mantém o mapa completo; clientes não recebem a seed nem
 células ainda ocultas. A validação de objetivos (regras ainda não definidas) e
-o aceite visual do mapa no tablet continuam pendentes. A etapa 5 está em
-implementação: o servidor limita movimentos pela destreza e bloqueia paredes/
+o aceite visual do mapa no tablet continuam pendentes. A etapa 5 foi
+implementada: o servidor limita movimentos pela destreza e bloqueia paredes/
 conectores incompatíveis; visão compartilhada revela células exploradas e envia
 somente terreno já descoberto, com névoa densa persistente e névoa leve
-temporária. O raio padrão é três células e pode ser alterado por
-`PLAYER_VISION_RADIUS_CELLS` no `.env` (1–12). O catálogo público já omite
-atributos e capacidades internas do monstro. Ainda faltam aceite físico,
+temporária. A velocidade base é configurável por
+`BASE_MOVEMENT_CELLS_PER_SECOND` no `.env` (padrão 0,5 célula/s); o cliente
+recebe a mesma taxa do servidor. O raio padrão é três células e pode ser
+alterado por `PLAYER_VISION_RADIUS_CELLS` no `.env` (1–12). O catálogo público
+já omite atributos e capacidades internas do monstro. Ainda faltam aceite físico,
 estados/visão próprios do monstro e a contribuição de 10% de jogadores dormindo
 quando a mecânica de sono existir. O servidor mantém participantes, atributos,
 escala, posições, prontidão, contagem, capítulo, pausa e cores dos tokens em
@@ -302,15 +304,17 @@ Requisitos: Node.js >= 22.18, npm e Docker com Compose.
 
 ```sh
 npm ci
-npm run setup:env
-docker compose up --build -d --wait
+./start-linux.sh
 ```
 
-`setup:env` gera `.env` local com segredos aleatórios e permissões restritas,
-sem exibir valores ou sobrescrever um arquivo existente. O arquivo é ignorado
-por Git e pelo contexto Docker. Alternativamente, copiar `.env.example` para
-`.env` e substituir o placeholder da senha do PostgreSQL por um segredo de ao menos
-32 caracteres. Nunca versionar o arquivo real.
+`start-linux.sh` cria `.env` com segredos aleatórios e permissões restritas se
+ele ainda não existir, então recompila e inicia PostgreSQL, servidor e jogo,
+aguardando os serviços ficarem saudáveis. O script não inicia o admin opcional.
+Para aplicar mudanças no `.env`, execute-o novamente; uma mudança que recrie o
+servidor encerra a partida em memória. O arquivo `.env` é ignorado por Git e
+pelo contexto Docker. Alternativamente, copiar `.env.example` para `.env` e
+substituir o placeholder da senha do PostgreSQL por um segredo de ao menos 32
+caracteres. Nunca versionar o arquivo real.
 
 - Jogo no notebook: `http://localhost:8080`.
 - Tablet: `http://<IP-LAN-do-notebook>:8080`, na mesma rede.
@@ -820,8 +824,10 @@ continuam pendentes; esta última depende das regras ainda não decididas.
 
 ### 5. Movimento e visão
 
-- [x] Movimento autoritativo com base de 0,5 célula/s e multiplicador
-  `1 + (destreza - 1) × 0,1`; o cliente também limita a previsão ao dedo.
+- [x] Movimento autoritativo com base configurável por
+  `BASE_MOVEMENT_CELLS_PER_SECOND` (padrão 0,5 célula/s) e multiplicador
+  `1 + (destreza - 1) × 0,1`; o cliente usa a mesma taxa do snapshot para
+  limitar a previsão ao dedo.
 - [x] Bloqueio de células não transitáveis e conectores incompatíveis, sem
   desvio automático; requisitos de ação/atributo aguardam regras definidas.
 - [x] Visão compartilhada de três células por padrão; raio configurável em
@@ -836,6 +842,14 @@ continuam pendentes; esta última depende das regras ainda não decididas.
 conectores, união da visão e sanitização do catálogo. Ainda falta validar
 arrasto, barreiras e névoa no tablet; visão do monstro e status em uso seguem
 pendentes até existir essa perspectiva autorizada.
+
+`BASE_MOVEMENT_CELLS_PER_SECOND` define a velocidade de movimento base em
+células hexagonais por segundo; deve ser positivo e usa `0.5` por padrão. O
+servidor valida a configuração e a inclui no snapshot para que o limite visual
+do cliente permaneça sincronizado com o limite autoritativo. Para aplicar uma
+mudança no Compose, recriar o servidor com
+`docker compose up --build -d --wait server`; isso encerra a partida em memória, então
+não executar durante uma partida ativa.
 
 ### 6. Interações reutilizáveis
 
@@ -938,6 +952,8 @@ sem duplicar controladores ou expor informações ocultas.
 | 2026-11-01 | Substituída a paleta por exatamente 13 cores nomeadas conforme pedido: vermelho, azul, verde, amarelo, roxo, rosa, preto, cinza, branco, laranja, marrom, verde escuro e azul escuro. | `npm run typecheck`, `npm test` (16 contratos + 11 servidor + 5 jogo), `npm run build -w @terror/game` e `git diff --check` passaram. Publicados `game` e `server` separadamente com `--no-deps`, sem tocar no PostgreSQL; antes de recriar o servidor, API confirmou lobby vazio. Após publicação, os containers `game`, `server` e `postgres` ficaram saudáveis, `/api/health` respondeu pronto e `/api/match` retornou lobby vazio. Navegador confirmou as 13 opções, amarelo selecionado inicialmente, clique em azul atualizando o botão e fechando a paleta; modal fechado sem entrar. Aceite físico no tablet segue pendente. |
 | 2026-11-01 | Usuário confirmou que o checklist físico de entrada, cores, controles, pausa/retomada e dez contatos simultâneos funcionou no tablet. Etapa 4: catálogo com clareira, cabana e bosque; geração conectada por seed, encaixes recíprocos, rotação de 60°, dimensionamento pela área útil/escala, rejeição de capacidade insuficiente e desenho dos terrenos no tabuleiro. O snapshot envia apenas a seed para reconstrução determinística nos clientes. | `npm test` passou (17 contratos, 12 testes do servidor e 5 do jogo); `npm run typecheck`, `npm run build` e `git diff --check` passaram. Testes cobrem repetibilidade da seed, módulos/células sem sobreposição, rotações, ajuste pela escala e rejeição de tela pequena. A arena máxima suportada (7680×7680, escala 0,5) gerou 5615 módulos em ~288 ms no ambiente atual. Ainda não foi feito o aceite visual do mapa no tablet; validação de objetivos aguarda regras confirmadas. |
 | 2026-11-01 | Etapa 5 implementada: movimento autoritativo a 0,5 célula/s com multiplicador por destreza, colisões por transitabilidade/conectores e limites também na previsão local; raio de visão padrão 3 configurável por `PLAYER_VISION_RADIUS_CELLS`; exploração compartilhada persistente e névoa leve dinâmica. Seed e células ocultas ficam no servidor; snapshots expõem apenas células exploradas/visíveis. `/api/catalog` omite atributos/capacidades do monstro. | `npm test` passou (19 contratos, 14 testes do servidor e 5 do jogo); `npm run typecheck`, `npm run build`, `git diff --check` e integração API/Socket.IO no PostgreSQL isolado (`docker compose --profile test run --build --rm integration`) passaram. Não executados aceite visual no tablet, visão separada do monstro ou integração de sono; aceite visual do mapa modular da etapa 4 também permanece pendente. |
+| 2026-11-01 | Velocidade base de movimento exposta em `BASE_MOVEMENT_CELLS_PER_SECOND` no `.env`, padrão 0,5 célula/s; servidor valida e publica o valor no snapshot para sincronizar o limite de movimento do cliente. | `npm test` (19 contratos, 15 servidor, 5 jogo), `npm run typecheck`, `npm run build -w @terror/game` e `git diff --check` passaram. O aceite no tablet continua pendente; a próxima etapa permanece validar visualmente mapa, movimento, barreiras e névoa. |
+| 2026-11-01 | Criado `start-linux.sh` para criar `.env` quando ausente, reconstruir e iniciar os serviços principais, aguardando a saúde do stack; admin permanece opcional. | Validado com `bash -n start-linux.sh` e `git diff --check`. Não executei o script, pois ele pode reiniciar serviços e encerrar a partida ativa. |
 
 Adicionar novas linhas com entregas reais e evidências de validação. Não listar
 como concluídos comportamentos ainda apenas planejados.

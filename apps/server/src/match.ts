@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   BASE_MOVEMENT_CELLS_PER_SECOND, catalogSchema,
-  matchSnapshotSchema, playerVisionRadiusSchema,
+  matchSnapshotSchema, movementSpeedSchema, playerVisionRadiusSchema,
   allocateAttributePoint, generateTerrainMap, initialPlayerAttributes, playerAttributesSchema,
   matchCommandSchema, moveWithinTerrain, movementMultiplier, terrainLayout, terrainMapCells,
   visibleTerrainCellIndices, initialTokenPosition,
@@ -34,16 +34,19 @@ export class Match {
   #visionStateKey: string | null = null;
   #lastMoveSimulationMs = new Map<number, number>();
   readonly #visionRadiusCells: number;
+  readonly #baseMovementCellsPerSecond: number;
   readonly #now: () => number;
 
   constructor(
     catalog: Catalog,
     now: () => number = () => performance.now(),
     visionRadiusCells = 3,
+    baseMovementCellsPerSecond = BASE_MOVEMENT_CELLS_PER_SECOND,
   ) {
     this.#catalog = catalogSchema.parse(catalog);
     this.#now = now;
     this.#visionRadiusCells = playerVisionRadiusSchema.parse(visionRadiusCells);
+    this.#baseMovementCellsPerSecond = movementSpeedSchema.parse(baseMovementCellsPerSecond);
     this.#lastTime = now();
   }
 
@@ -75,6 +78,7 @@ export class Match {
       error: this.#error,
       controlSlots: owner ? [...this.#owners].filter(([, o]) => o === owner).map(([slot]) => slot).sort((a, b) => a - b) : [],
       visionRadiusCells: this.#visionRadiusCells,
+      baseMovementCellsPerSecond: this.#baseMovementCellsPerSecond,
       exploredTerrainCells: [...this.#exploredTerrainCells.values()],
       visibleTerrainCellKeys: this.#visibleTerrainCellKeys,
     });
@@ -235,7 +239,7 @@ export class Match {
           this.#terrainCells,
           player.position,
           command.position,
-          BASE_MOVEMENT_CELLS_PER_SECOND
+          this.#baseMovementCellsPerSecond
             * movementMultiplier(player.attributes.dexterity)
             * layout.width
             * elapsedMs / 1000,

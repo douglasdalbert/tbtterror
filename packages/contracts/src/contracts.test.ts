@@ -4,7 +4,8 @@ import {
   allocateAttributePoint, attributesSchema, availableAttributePoints, initialPlayerAttributes,
   PLAYER_COLORS, PLAYER_COLOR_IDS, playerColorSchema,
   generateTerrainMap, generatedTerrainMapSchema, STARTER_TERRAIN_MODULES, terrainMapCells,
-  movementMultiplier, moveWithinTerrain, visibleTerrainCellIndices,
+  BASE_MOVEMENT_CELLS_PER_SECOND, movementMultiplier, movementSpeedSchema,
+  moveWithinTerrain, visibleTerrainCellIndices,
   matchSnapshotSchema, parseApiResponse, playerAttributesSchema, settingsSchema,
   enterPreparationPlayer, leavePreparationPlayer, changePreparationAttribute, rotatePlayerName, type PreparationState,
   rotateTerrainModule, terrainModuleCatalogSchema, terrainModuleSchema, terrainModulesConnect, type TerrainModule,
@@ -282,6 +283,10 @@ test("vision includes hex cells in range and unions every player's view", () => 
 });
 
 test("lobby snapshots cannot accidentally include hidden world data", () => {
+  assert.equal(BASE_MOVEMENT_CELLS_PER_SECOND, 0.5);
+  assert.equal(movementSpeedSchema.safeParse(0.75).success, true);
+  assert.equal(movementSpeedSchema.safeParse(0).success, false);
+  assert.equal(movementSpeedSchema.safeParse(Infinity).success, false);
   const snapshot = {
     id: "8312cb65-50ae-4fb6-879c-071b1861bd22",
     phase: "lobby",
@@ -289,6 +294,7 @@ test("lobby snapshots cannot accidentally include hidden world data", () => {
     players: [], arena: { width: 1920, height: 1200, scale: 1 },
     remainingMs: 0, resumeRemainingMs: 0, simulationMs: 0, chapter: "", error: "", controlSlots: [],
     visionRadiusCells: 3,
+    baseMovementCellsPerSecond: BASE_MOVEMENT_CELLS_PER_SECOND,
     exploredTerrainCells: [],
     visibleTerrainCellKeys: [],
   };

@@ -295,13 +295,22 @@ test("configuration rejects missing or example secrets without exposing them", (
   });
   assert.equal(config.PORT, 3000);
   assert.equal(config.PLAYER_VISION_RADIUS_CELLS, 3);
+  assert.equal(config.BASE_MOVEMENT_CELLS_PER_SECOND, 0.5);
   assert.equal(readConfig({
     POSTGRES_PASSWORD: "b".repeat(32),
     PLAYER_VISION_RADIUS_CELLS: "5",
   }).PLAYER_VISION_RADIUS_CELLS, 5);
+  assert.equal(readConfig({
+    POSTGRES_PASSWORD: "b".repeat(32),
+    BASE_MOVEMENT_CELLS_PER_SECOND: "0.75",
+  }).BASE_MOVEMENT_CELLS_PER_SECOND, 0.75);
   assert.throws(() => readConfig({
     POSTGRES_PASSWORD: "b".repeat(32),
     PLAYER_VISION_RADIUS_CELLS: "0",
+  }), /Invalid server configuration/);
+  assert.throws(() => readConfig({
+    POSTGRES_PASSWORD: "b".repeat(32),
+    BASE_MOVEMENT_CELLS_PER_SECOND: "0",
   }), /Invalid server configuration/);
 });
 
@@ -319,4 +328,17 @@ test("vision radius is validated and included in snapshots", () => {
   });
   assert.equal(new Match(catalog, undefined, config.PLAYER_VISION_RADIUS_CELLS).snapshot().visionRadiusCells, 5);
   assert.throws(() => new Match(catalog, undefined, 0));
+});
+
+test("configured movement speed is validated and included in snapshots", () => {
+  const config = readConfig({
+    POSTGRES_PASSWORD: "b".repeat(32),
+    BASE_MOVEMENT_CELLS_PER_SECOND: "0.75",
+  });
+  assert.equal(
+    new Match(catalog, undefined, 3, config.BASE_MOVEMENT_CELLS_PER_SECOND)
+      .snapshot().baseMovementCellsPerSecond,
+    0.75,
+  );
+  assert.throws(() => new Match(catalog, undefined, 3, 0));
 });

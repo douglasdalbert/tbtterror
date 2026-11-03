@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { playerColorSchema } from "./playerColors.js";
+import { movementSpeedSchema } from "./terrain.js";
 
 export { parseApiResponse } from "./http.js";
 export { boardArea, cellDimensions, hexCorners, playerSectorDepth, terrainLayout, tokenHitCircle, initialTokenPosition } from "./layout.js";
 export {
-  BASE_MOVEMENT_CELLS_PER_SECOND, generateTerrainMap, generatedTerrainMapSchema, hexDirections,
+  BASE_MOVEMENT_CELLS_PER_SECOND, movementSpeedSchema,
+  generateTerrainMap, generatedTerrainMapSchema, hexDirections,
   moveWithinTerrain, movementMultiplier, rotateTerrainModule, visibleTerrainCellIndices,
   STARTER_TERRAIN_MODULES, terrainMapCells, terrainModuleCellSchema, terrainModuleCatalogSchema,
   terrainModuleSchema, terrainModulesConnect, type GeneratedTerrainMap, type TerrainModule, type TerrainModuleCell,
@@ -121,6 +123,7 @@ export const matchSnapshotSchema = z.strictObject({
   error: z.string(),
   controlSlots: z.array(z.number().int().min(0).max(7)).max(8),
   visionRadiusCells: playerVisionRadiusSchema,
+  baseMovementCellsPerSecond: movementSpeedSchema,
   exploredTerrainCells: z.array(exploredTerrainCellSchema).max(60000),
   visibleTerrainCellKeys: z.array(terrainCellKeySchema).max(60000),
 });
