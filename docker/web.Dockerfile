@@ -2,6 +2,7 @@ FROM node:22-bookworm-slim AS build
 ARG APP=game
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
+COPY .env.example .env.example
 COPY apps/server/package.json apps/server/package.json
 COPY apps/game/package.json apps/game/package.json
 COPY apps/admin/package.json apps/admin/package.json

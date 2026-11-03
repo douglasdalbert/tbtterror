@@ -26,7 +26,9 @@ aqui prevalecem sobre alternativas antigas dessa proposta.
 - [x] Selecionar cor exclusiva para cada token durante a entrada do jogador.
 - [x] Completar no tablet o aceite do fluxo de entrada, controles e dez contatos simultâneos.
 - [x] Implementar limites de movimento, colisões, descoberta compartilhada e catálogo público filtrado (etapa 5).
-- [ ] Validar visualmente mapa modular, movimento, barreiras e névoa no tablet.
+- [x] Validar no tablet movimento, névoas e multitoque.
+- [ ] Ampliar testes de colisão quando forem criados e combinados vários tipos
+  de terreno.
 - [ ] Definir regras dos objetivos antes de validar sua alcançabilidade.
 
 **Estado:** etapas 2 e 3 tiveram o aceite físico confirmado pelo usuário.
@@ -40,13 +42,22 @@ o aceite visual do mapa no tablet continuam pendentes. A etapa 5 foi
 implementada: o servidor limita movimentos pela destreza e bloqueia paredes/
 conectores incompatíveis; visão compartilhada revela células exploradas e envia
 somente terreno já descoberto, com névoa densa persistente e névoa leve
-temporária. A velocidade base é configurável por
+temporária. No tablet, o usuário confirmou movimento, névoas e multitoque; o
+teste também demonstrou que barreiras podem bloquear o token. O comportamento
+observado em áreas marrons/verdes fica como protótipo, sem decisão de design.
+Quando a criação de vários terrenos for retomada, ampliar os testes de colisão
+entre tipos de terreno, conectores e suas combinações. A velocidade base é
+configurável por
 `BASE_MOVEMENT_CELLS_PER_SECOND` no `.env` (padrão 0,5 célula/s); o cliente
 recebe a mesma taxa do servidor. O raio padrão é três células e pode ser
 alterado por `PLAYER_VISION_RADIUS_CELLS` no `.env` (1–12). O catálogo público
-já omite atributos e capacidades internas do monstro. Ainda faltam aceite físico,
-estados/visão próprios do monstro e a contribuição de 10% de jogadores dormindo
-quando a mecânica de sono existir. O servidor mantém participantes, atributos,
+já omite atributos e capacidades internas do monstro. O aceite físico de
+movimento, névoas e multitoque foi confirmado, e o teste demonstrou bloqueio
+por barreiras. A diferença observada entre áreas marrons e verdes não é uma
+decisão de design. Testes ampliados entre múltiplos terrenos ficam para quando
+a criação/combinação desses terrenos for retomada. Estados/visão próprios do
+monstro e contribuição de 10% de jogadores dormindo dependem das mecânicas
+ainda não implementadas. O servidor mantém participantes, atributos,
 escala, posições, prontidão, contagem, capítulo, pausa e cores dos tokens em
 memória, com contratos validados e comandos Socket.IO. A geração recusa iniciar
 se o mapa não comportar todos os jogadores.
@@ -123,9 +134,12 @@ o botão de cor aleatória e o modal de cores, incluindo a cor atual destacada.
 Depois, o usuário confirmou o aceite físico do checklist no tablet e informou
 que tudo funcionou.
 
-**Próxima etapa:** publicar e testar no tablet o limite de movimento, colisões,
-névoa e mapa modular. O movimento é livre durante a preparação e limitado pela
-destreza somente durante a fase `running`. O aceite físico ainda não ocorreu.
+**Próxima etapa:** revisar no tablet o mapa modular. Movimento, névoas,
+multitoque e bloqueio por barreiras já foram testados. Quando a criação de
+vários terrenos for retomada, ampliar os testes de colisão cobrindo os tipos e
+combinações gerados; a diferença observada entre áreas marrons e verdes não é
+uma regra ou preferência de design. O movimento é livre durante a preparação e
+limitado pela destreza somente durante a fase `running`.
 Antes de validar a alcançabilidade, definir as regras do primeiro objetivo e
 suas dependências; a exigência de força 2 para combustível continua sendo
 proposta, não decisão.
@@ -828,12 +842,14 @@ fisicamente o fluxo de prontidão, contagem, cancelamento, pausa e retomada.
 - [x] Geração dimensionada pela área útil e pelo multiplicador do token.
 - [ ] Validação de objetivos alcançáveis e dependências de itens/atributos.
 - [x] Geração reproduzível por seed para diagnóstico e testes.
+- [ ] Ampliar testes de colisão ao criar/combinar vários tipos de terreno.
 
 **Aceite:** testar rotações e conjuntos de seeds/tamanhos; não iniciar mapas
 inválidos; comunicar claramente quando a tela/escala não comportar a partida.
 Testes automatizados cobrem reprodutibilidade, encaixe, capacidade e rejeição
-de mapa pequeno. O aceite visual no tablet e a alcançabilidade dos objetivos
-continuam pendentes; esta última depende das regras ainda não decididas.
+de mapa pequeno. Ampliar a cobertura de colisões quando mais terrenos forem
+criados e combinados. O aceite visual completo no tablet continua pendente; a
+alcançabilidade dos objetivos depende das regras ainda não decididas.
 
 ### 5. Movimento e visão
 
@@ -852,9 +868,11 @@ continuam pendentes; esta última depende das regras ainda não decididas.
   terreno oculto, estado do monstro nem status de atributos em uso.
 
 **Aceite:** testes automatizados cobrem velocidade, destreza, colisões,
-conectores, união da visão e sanitização do catálogo. Ainda falta validar
-arrasto, barreiras e névoa no tablet; visão do monstro e status em uso seguem
-pendentes até existir essa perspectiva autorizada.
+conectores, união da visão e sanitização do catálogo. No tablet, movimento,
+névoas, multitoque e bloqueio por barreiras foram confirmados. Expandir os
+testes de colisão para vários tipos e combinações de terreno quando essa
+criação avançar. Visão do monstro e status em uso seguem pendentes até existir
+essa perspectiva autorizada.
 
 `BASE_MOVEMENT_CELLS_PER_SECOND` define a velocidade de movimento base em
 células hexagonais por segundo; deve ser positivo e usa `0.5` por padrão. O
@@ -929,6 +947,8 @@ sem duplicar controladores ou expor informações ocultas.
 
 | Data | Entrega | Verificação |
 |---|---|---|
+| 2026-11-02 | Aceite físico parcial da etapa 5: movimento, névoas e multitoque confirmados no tablet; teste demonstrou que barreiras podem bloquear o token. Os casos ampliados para múltiplos tipos/combinações de terreno ficam para quando sua criação for retomada. | Confirmação manual do usuário no tablet. Aceite visual completo do mapa modular e testes ampliados de terrenos ainda pendentes; sem alterações de código nesta atualização. |
+| 2026-11-02 | Etapa 5 publicada no Compose `terror`; corrigido o contexto Docker para incluir `.env.example` no build do jogo sem incluir `.env`. Servidor e jogo recriados, PostgreSQL/volume preservados. | `npm run typecheck`, `npm test` (19 contratos + 15 servidor + 5 jogo), `npm run build`, `npm run check:stack` e `git diff --check` passaram; `postgres`, `server` e `game` saudáveis e a imagem ativa do jogo coincide com a publicada. Na publicação, aceite visual e físico ainda pendentes; o teste físico posterior está registrado acima. |
 | 2026-11-02 | `.env` passou a prevalecer sobre `.env.example`, que completa variáveis ausentes; fallback aplicado ao Compose, servidor local, Vite e verificações de stack. Senha de exemplo vazia e obrigatória no arquivo local. | `npm run typecheck`, `npm run build -w @terror/game`, `npm test`, `npm run compose -- config --quiet` e verificação de precedência do Node sem imprimir valores passaram. `check:lifecycle` não foi executado para evitar reiniciar serviços. |
 | 2026-10-31 | Arquitetura, requisitos e etapas consolidados; instruções para agentes criadas. | Revisão documental frente à proposta e às decisões da conversa; sem código executável nesta entrega. |
 | 2026-10-31 | Base técnica: quatro workspaces, Compose, migração/conteúdo mínimo, API/Socket.IO e admin opcional. | Build/typecheck, sete testes unitários, uma integração PostgreSQL, verificação HTTP/WebSocket, ciclo de vida do volume/admin/servidor e canvas no navegador. Tablet físico ainda pendente. |
