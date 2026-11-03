@@ -1,16 +1,21 @@
 import { z } from "zod";
 import { playerColorSchema } from "./playerColors.js";
-import { movementSpeedSchema, turnDurationSchema } from "./terrain.js";
+import { doorStateSchema, movementSpeedSchema, turnDurationSchema } from "./terrain.js";
+import { activeDoorActionSchema, doorActionOptionSchema, doorActionSchema, doorTargetSchema } from "./doorActions.js";
 import { DEFAULT_HEX_SIDE_TOKEN_RATIO, hexSideTokenRatioSchema } from "./layout.js";
 
 export { parseApiResponse } from "./http.js";
 export { boardArea, cellDimensions, hexCorners, playerSectorDepth, terrainLayout, tokenHitCircle, initialTokenPosition } from "./layout.js";
-export { DEFAULT_HEX_SIDE_TOKEN_RATIO, hexSideTokenRatioSchema } from "./layout.js";
+export { BASE_TOKEN_DIAMETER, DEFAULT_HEX_SIDE_TOKEN_RATIO, hexSideTokenRatioSchema } from "./layout.js";
+export {
+  DOOR_ACTION_RULES, doorActionsForState, doorStateAfterAction,
+  type GateAction, type DoorAction, type DoorTarget, type DoorActionOption, type ActiveDoorAction,
+} from "./doorActions.js";
 export {
   BASE_MOVEMENT_CELLS_PER_TURN, DEFAULT_TURN_DURATION_MS, movementSpeedSchema, turnDurationSchema,
   generateTerrainMap, generatedTerrainMapSchema, hexDirections,
   moveWithinTerrain, movementMultiplier, rotateTerrainModule, visibleTerrainCellIndices,
-  terrainGateSchema,
+  terrainGateSchema, doorStateSchema, axialFromPoint,
   STARTER_TERRAIN_MODULES, terrainMapCells, terrainModuleCellSchema, terrainModuleCatalogSchema,
   terrainModuleSchema, terrainModulesConnect, type GeneratedTerrainMap, type TerrainModule, type TerrainModuleCell,
   type TerrainGate, type DoorState,
@@ -99,7 +104,7 @@ export const exploredTerrainCellSchema = z.strictObject({
     z.strictObject({
       direction: z.number().int().min(0).max(5),
       kind: z.literal("door"),
-      state: z.enum(["open", "closed"]),
+      state: doorStateSchema,
     }),
   ])).default([]),
 });
@@ -142,6 +147,8 @@ export const matchSnapshotSchema = z.strictObject({
   baseMovementCellsPerTurn: movementSpeedSchema,
   exploredTerrainCells: z.array(exploredTerrainCellSchema).max(60000),
   visibleTerrainCellKeys: z.array(terrainCellKeySchema).max(60000),
+  doorActions: z.array(doorActionOptionSchema).max(96).default([]),
+  activeDoorActions: z.array(activeDoorActionSchema).max(8).default([]),
 });
 
 const slot = z.number().int().min(0).max(7);
@@ -157,6 +164,8 @@ export const matchCommandSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("press"), slot }),
   z.strictObject({ type: z.literal("release"), slot }),
   z.strictObject({ type: z.literal("move"), slot, position: pointSchema }),
+  z.strictObject({ type: z.literal("door-action"), slot, target: doorTargetSchema, action: doorActionSchema }),
+  z.strictObject({ type: z.literal("cancel-door-action"), slot, target: doorTargetSchema, action: doorActionSchema }),
 ]);
 export const commandResultSchema = z.discriminatedUnion("ok", [
   z.strictObject({ ok: z.literal(true) }),

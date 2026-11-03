@@ -158,7 +158,7 @@ export function App() {
       report("Sem conexão com o servidor. Aguarde a reconexão.");
       return;
     }
-    const action = !["press", "move", "release", "viewport"].includes(command.type);
+    const action = !["press", "move", "release", "viewport", "cancel-door-action"].includes(command.type);
     const busyAction = ["join", "leave", "ready", "pause", "resume"].includes(command.type);
     if (busyAction && slot !== undefined) setBusySlots((current) => ({ ...current, [slot]: true }));
     void socket.timeout(3000).emitWithAck("match:command", command)
@@ -212,6 +212,10 @@ export function App() {
             moving={!!pressedSlots[slot] || (player?.pressed ?? false)}
             controllable={!player || (snapshot?.controlSlots.includes(slot) ?? false)}
             busy={!!busySlots[slot] || connection !== "connected"}
+            doorActions={connection === "connected" ? snapshot?.doorActions.filter((option) => option.slot === slot) ?? [] : []}
+            activeDoorAction={snapshot?.activeDoorActions.find((action) => action.slot === slot)}
+            simulationTurns={snapshot?.simulationTurns ?? 0}
+            onCommand={sendCommand}
             scale={scale}
             onEnter={(name, color) => sendCommand({ type: "join", slot, name, color })}
             onLeave={() => sendCommand({ type: "leave", slot })}

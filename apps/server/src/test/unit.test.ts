@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cellDimensions, terrainLayout, type Catalog, type MatchCommand } from "@terror/contracts";
+import {
+  axialFromPoint, cellDimensions, hexDirections, terrainLayout,
+  type Catalog, type MatchCommand, type DoorAction,
+} from "@terror/contracts";
 import { readConfig } from "../config.js";
 import { Match } from "../match.js";
+import { terrainRoute } from "./terrain-route.js";
 
 const catalog: Catalog = {
   revision: 1,
@@ -51,6 +55,313 @@ function fixture() {
   const advance = (ms: number) => { time += ms; match.tick(); };
   return { match, command, advance };
 }
+
+function doorFixture(strength = 3, turnDurationMs = 1000, dexterity = 1, seed?: string) {
+  let time = 0;
+  const match = new Match(catalog, () => time, 12, 100, turnDurationMs, 1.2, seed ? () => seed : undefined);
+  match.connect("tablet");
+  const command = (value: MatchCommand) => assert.deepEqual(match.command("tablet", value), { ok: true });
+  const advance = (ms: number) => { time += ms; match.tick(); };
+  command({ type: "viewport", width: 1000, height: 800 });
+  command({ type: "join", slot: 0, name: "AAA", color: "red" });
+  command({ type: "join", slot: 1, name: "AAB", color: "blue" });
+  for (const slot of [0, 1]) {
+    for (let point = 1; point < strength; point++) command({ type: "attribute", slot, attribute: "strength", delta: 1 });
+    for (let point = 1; point < dexterity; point++) command({ type: "attribute", slot, attribute: "dexterity", delta: 1 });
+  }
+  command({ type: "ready", slot: 0, value: true });
+  command({ type: "ready", slot: 1, value: true });
+  advance(10000);
+  advance(2000);
+  const snapshot = () => match.snapshot("tablet");
+  const door = () => {
+    for (const cell of snapshot().exploredTerrainCells) {
+      for (const gate of cell.gates) {
+        if (gate.kind === "door") return { q: cell.q, r: cell.r, direction: gate.direction, state: gate.state };
+      }
+    }
+    throw new Error("Porta não descoberta na arena de teste.");
+  };
+  const goTo = (target: { q: number; r: number }, slot = 0) => {
+    const state = snapshot();
+    const { width, height, scale, hexSideTokenRatio } = state.arena;
+    const path = terrainRoute(state, target, slot);
+    if (!path) return false;
+    const dimensions = cellDimensions(scale, hexSideTokenRatio);
+    for (const cell of path) {
+      command({ type: "press", slot });
+      advance(250);
+      const position = {
+        x: width / 2 + dimensions.width * (cell.q + cell.r / 2),
+        y: height / 2 + dimensions.radius * 1.5 * cell.r,
+      };
+      command({ type: "move", slot, position });
+      command({ type: "release", slot });
+      const actual = snapshot().players[slot]!.position;
+      assert.ok(Math.hypot(actual.x - position.x, actual.y - position.y) < 1e-6);
+    }
+    return true;
+  };
+  const act = (action: DoorAction, slot = 0) => {
+    const { q, r, direction } = door();
+    command({ type: "door-action", slot, target: { q, r, direction }, action });
+  };
+  const offset = hexDirections[door().direction]!;
+  const outside = { q: door().q + offset.q, r: door().r + offset.r };
+  if (!goTo(outside)) {
+    assert.equal(goTo(door()), true);
+    act("open");
+    advance(turnDurationMs);
+    assert.equal(goTo(outside), true);
+  }
+  if (door().state === "open") { act("close"); advance(turnDurationMs); }
+  return { match, command, advance, snapshot, door, goTo, act, outside };
+}
+
+test("held door actions require proximity and released tokens, cancel early and freeze with pause", () => {
+  const { match, command, advance, snapshot, door, act } = doorFixture(3, 2000);
+  const initial = snapshot();
+  assert.deepEqual(initial.doorActions.filter((option) => option.slot === 0).map(({ action }) => action), ["open"]);
+  assert.equal(match.command("tablet", {
+    type: "door-action", slot: 0, target: { q: door().q + 20, r: door().r, direction: door().direction }, action: "open",
+  }).ok, false);
+  command({ type: "press", slot: 0 });
+  const { q, r, direction } = door();
+  assert.deepEqual(match.command("tablet", { type: "door-action", slot: 0, target: { q, r, direction }, action: "open" }),
+    { ok: false, error: "Não é possível executar ação enquanto em movimento." });
+  command({ type: "release", slot: 0 });
+  act("open");
+  assert.equal(match.command("tablet", { type: "press", slot: 0 }).ok, false);
+  command({ type: "press", slot: 1 });
+  command({ type: "release", slot: 1 });
+  advance(1000);
+  assert.equal(door().state, "closed");
+  command({ type: "cancel-door-action", slot: 0, target: { q, r, direction }, action: "close" });
+  assert.equal(snapshot().activeDoorActions.length, 1);
+  command({ type: "cancel-door-action", slot: 0, target: { q, r, direction }, action: "open" });
+  advance(4000);
+  assert.equal(door().state, "closed");
+  act("open");
+  advance(1000);
+  const started = snapshot().activeDoorActions[0]!.startedTurn;
+  command({ type: "pause", slot: 1 });
+  advance(10000);
+  assert.equal(door().state, "closed");
+  assert.equal(snapshot().activeDoorActions[0]!.startedTurn, started);
+  command({ type: "resume", slot: 0, value: true });
+  command({ type: "resume", slot: 1, value: true });
+  advance(10000);
+  advance(999);
+  assert.equal(door().state, "closed");
+  advance(1);
+  assert.equal(door().state, "open");
+  assert.equal(snapshot().activeDoorActions.length, 0);
+  assert.deepEqual(snapshot().players[0]!.position, initial.players[0]!.position);
+});
+
+test("locking and unlocking are inside-only; breaking requires strength 3 and stays permanently open", () => {
+  const { match, command, advance, snapshot, door, act, goTo, outside } = doorFixture();
+  const invalid = (action: DoorAction) => {
+    const { q, r, direction } = door();
+    assert.equal(match.command("tablet", { type: "door-action", slot: 0, target: { q, r, direction }, action }).ok, false);
+  };
+  invalid("lock");
+  invalid("break");
+  act("open");
+  advance(1000);
+  assert.equal(goTo(outside, 1), true);
+  assert.equal(goTo(door()), true);
+  act("close");
+  advance(1000);
+  assert.deepEqual(snapshot().doorActions.filter(({ slot }) => slot === 0).map(({ action }) => action), ["open", "lock"]);
+  act("lock");
+  advance(1000);
+  assert.equal(door().state, "locked");
+  assert.equal(goTo(outside), false);
+  assert.deepEqual(snapshot().doorActions.filter(({ slot }) => slot === 0).map(({ action }) => action), ["unlock", "break"]);
+  act("unlock");
+  advance(1000);
+  assert.equal(door().state, "closed");
+  act("lock");
+  advance(1000);
+  act("break", 1);
+  advance(1999);
+  assert.equal(door().state, "locked");
+  advance(1);
+  assert.equal(door().state, "broken");
+  assert.equal(goTo(outside), true);
+  invalid("close");
+  invalid("lock");
+  invalid("open");
+  command({ type: "press", slot: 0 });
+  command({ type: "release", slot: 0 });
+});
+
+test("door reservations, strength, ownership and disconnect cleanup are enforced by the server", () => {
+  const { match, command, advance, snapshot, door, act, goTo, outside } = doorFixture(1);
+  if (!goTo(outside, 1)) {
+    act("open");
+    advance(1000);
+    assert.equal(goTo(outside, 1), true);
+    act("close");
+    advance(1000);
+  }
+  act("open");
+  assert.equal(match.command("tablet", {
+    type: "door-action", slot: 1, target: { q: door().q, r: door().r, direction: door().direction }, action: "open",
+  }).ok, false);
+  match.connect("spectator");
+  assert.deepEqual(match.snapshot("spectator").doorActions, []);
+  assert.deepEqual(match.snapshot("spectator").activeDoorActions, []);
+  const { q, r, direction } = door();
+  assert.equal(match.command("spectator", { type: "cancel-door-action", slot: 0, target: { q, r, direction }, action: "open" }).ok, false);
+  advance(1000);
+  assert.equal(goTo(door()), true);
+  act("close");
+  advance(1000);
+  act("lock");
+  advance(1000);
+  assert.equal(match.command("tablet", {
+    type: "door-action", slot: 0, target: { q: door().q, r: door().r, direction: door().direction }, action: "break",
+  }).ok, false);
+  assert.deepEqual(snapshot().doorActions.filter(({ slot }) => slot === 1).map(({ action }) => action), ["break"]);
+  assert.equal(match.command("tablet", {
+    type: "door-action", slot: 1, target: { q: door().q, r: door().r, direction: door().direction }, action: "unlock",
+  }).ok, false);
+  act("unlock");
+  advance(500);
+  match.disconnect("tablet");
+  assert.equal(snapshot().activeDoorActions.length, 0);
+  advance(5000);
+  assert.equal(door().state, "locked");
+  assert.equal(snapshot().phase, "paused");
+  match.connect("tablet");
+  command({ type: "cancel-door-action", slot: 0, target: { q, r, direction }, action: "unlock" });
+  command({ type: "resume", slot: 0, value: true });
+  command({ type: "resume", slot: 1, value: true });
+  advance(10000);
+  act("unlock");
+  command({ type: "leave", slot: 0 });
+  advance(1000);
+  assert.equal(door().state, "locked");
+  assert.equal(snapshot().activeDoorActions.length, 0);
+});
+
+function windowFixture(dexterity = 2) {
+  const game = doorFixture(1, 2000, dexterity, "window-1");
+  game.act("open");
+  game.advance(2000);
+  assert.equal(game.goTo(game.door()), true);
+  const cells = game.snapshot().exploredTerrainCells;
+  const windows = cells.flatMap((cell) => cell.gates.flatMap((gate) => {
+    if (gate.kind !== "window") return [];
+    const offset = hexDirections[gate.direction]!;
+    const outside = cells.find((other) => other.q === cell.q + offset.q && other.r === cell.r + offset.r);
+    return [{ target: { q: cell.q, r: cell.r, direction: gate.direction }, outside }];
+  }));
+  const connected = windows.find(({ outside }) => outside && outside.terrainType !== "wall");
+  const outward = windows.find(({ outside }) => !outside);
+  assert.ok(connected?.outside);
+  assert.ok(outward);
+  const jump = () => game.command({ type: "door-action", slot: 0, target: connected.target, action: "jump-window" });
+  const location = () => {
+    const state = game.snapshot();
+    return axialFromPoint(state.players[0]!.position, state.arena.width, state.arena.height,
+      state.arena.scale, state.arena.hexSideTokenRatio);
+  };
+  return { ...game, connected, outward, jump, location };
+}
+
+test("window jumps require dexterity 2 and a valid destination, not merely knowledge of the window", () => {
+  for (const dexterity of [1, 2, 3]) {
+    const game = windowFixture(dexterity);
+    const { connected, outward, snapshot, match, command, goTo } = game;
+    assert.equal(goTo(connected.target), true);
+    const options = snapshot().doorActions.filter(({ slot, action }) => slot === 0 && action === "jump-window");
+    assert.equal(options.some(({ q, r, direction }) =>
+      q === connected.target.q && r === connected.target.r && direction === connected.target.direction), dexterity >= 2);
+    if (dexterity === 1) {
+      assert.equal(match.command("tablet", {
+        type: "door-action", slot: 0, target: connected.target, action: "jump-window",
+      }).ok, false);
+    } else {
+      game.jump();
+      game.advance(2000);
+      assert.deepEqual(game.location(), { q: connected.outside!.q, r: connected.outside!.r });
+      assert.ok(snapshot().doorActions.some(({ action, slot, q, r }) =>
+        slot === 0 && action === "jump-window" && q === connected.target.q && r === connected.target.r));
+      game.jump();
+      game.advance(2000);
+      assert.deepEqual(game.location(), { q: connected.target.q, r: connected.target.r });
+    }
+    assert.equal(goTo(outward.target), true);
+    const outwardOption = snapshot().doorActions.find(({ action, slot, q, r, direction }) =>
+      slot === 0 && action === "jump-window" && q === outward.target.q
+      && r === outward.target.r && direction === outward.target.direction);
+    if (dexterity >= 2) assert.equal(outwardOption?.available, false);
+    else assert.equal(outwardOption, undefined);
+    const position = snapshot().players[0]!.position;
+    assert.equal(match.command("tablet", {
+      type: "door-action", slot: 0, target: outward.target, action: "jump-window",
+    }).ok, false);
+    game.advance(4000);
+    assert.deepEqual(snapshot().players[0]!.position, position);
+    assert.equal(goTo({ q: 0, r: 0 }), true);
+    const farAway = { ...connected.target, q: 100 };
+    assert.equal(match.command("tablet", {
+      type: "door-action", slot: 0, target: farAway, action: "jump-window",
+    }).ok, false);
+    command({ type: "cancel-door-action", slot: 0, target: connected.target, action: "jump-window" });
+  }
+});
+
+test("window holds freeze on pause, cancel without moving and cannot be bypassed by dragging", () => {
+  const game = windowFixture();
+  const { connected, goTo, command, advance, snapshot, match, location, jump } = game;
+  assert.equal(goTo(connected.target), true);
+  const start = snapshot().players[0]!.position;
+  command({ type: "press", slot: 0 });
+  assert.equal(match.command("tablet", {
+    type: "door-action", slot: 0, target: connected.target, action: "jump-window",
+  }).ok, false);
+  advance(250);
+  const d = cellDimensions(1);
+  command({ type: "move", slot: 0, position: {
+    x: 500 + d.width * (connected.outside!.q + connected.outside!.r / 2),
+    y: 400 + d.radius * 1.5 * connected.outside!.r,
+  } });
+  command({ type: "release", slot: 0 });
+  assert.deepEqual(location(), { q: connected.target.q, r: connected.target.r });
+  assert.equal(goTo(connected.target), true);
+  jump();
+  advance(1000);
+  const halfway = snapshot().players[0]!.position;
+  command({ type: "cancel-door-action", slot: 0, target: connected.target, action: "jump-window" });
+  advance(4000);
+  assert.deepEqual(snapshot().players[0]!.position, halfway);
+  jump();
+  advance(1000);
+  command({ type: "pause", slot: 1 });
+  advance(5000);
+  assert.deepEqual(snapshot().players[0]!.position, halfway);
+  command({ type: "resume", slot: 0, value: true });
+  command({ type: "resume", slot: 1, value: true });
+  advance(10000);
+  assert.equal(match.command("tablet", { type: "press", slot: 0 }).ok, false);
+  advance(999);
+  assert.deepEqual(snapshot().players[0]!.position, halfway);
+  advance(1);
+  assert.deepEqual(location(), { q: connected.outside!.q, r: connected.outside!.r });
+  assert.notDeepEqual(snapshot().players[0]!.position, start);
+  assert.equal(snapshot().activeDoorActions.length, 0);
+  assert.equal(goTo(connected.target, 1), true);
+  command({ type: "door-action", slot: 1, target: connected.target, action: "jump-window" });
+  assert.equal(match.command("tablet", {
+    type: "door-action", slot: 0, target: connected.target, action: "jump-window",
+  }).ok, false);
+  match.disconnect("tablet");
+  assert.equal(snapshot().activeDoorActions.length, 0);
+});
 
 test("readiness starts exactly ten seconds, cancels globally and restarts from ten", () => {
   const { match, command, advance } = fixture();

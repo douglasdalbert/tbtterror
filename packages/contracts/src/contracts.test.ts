@@ -6,6 +6,7 @@ import {
   generateTerrainMap, generatedTerrainMapSchema, STARTER_TERRAIN_MODULES, terrainMapCells,
   BASE_MOVEMENT_CELLS_PER_TURN, DEFAULT_TURN_DURATION_MS, movementMultiplier,
   movementSpeedSchema, turnDurationSchema,
+  BASE_TOKEN_DIAMETER, DOOR_ACTION_RULES, doorActionsForState, doorStateAfterAction, matchCommandSchema,
   moveWithinTerrain, visibleTerrainCellIndices,
   matchSnapshotSchema, parseApiResponse, playerAttributesSchema, settingsSchema,
   enterPreparationPlayer, leavePreparationPlayer, changePreparationAttribute, rotatePlayerName, type PreparationState,
@@ -14,6 +15,52 @@ import {
 } from "./index.js";
 import { boardArea, cellDimensions, hexCorners, terrainLayout, tokenHitCircle } from "./layout.js";
 import { hexDirections } from "./terrain.js";
+import { activeDoorActionSchema, doorActionOptionSchema } from "./doorActions.js";
+
+test("tokens use 40 px and door rules distinguish states, sides and numeric action costs", () => {
+  assert.equal(BASE_TOKEN_DIAMETER, 40);
+  assert.equal(cellDimensions(1).side, 48);
+  assert.deepEqual(doorActionsForState("closed", false), ["open"]);
+  assert.deepEqual(doorActionsForState("closed", true), ["open", "lock"]);
+  for (const inside of [false, true]) {
+    assert.deepEqual(doorActionsForState("open", inside), ["close"]);
+    assert.deepEqual(doorActionsForState("broken", inside), []);
+  }
+  assert.deepEqual(doorActionsForState("locked", false), ["break"]);
+  assert.deepEqual(doorActionsForState("locked", true), ["unlock", "break"]);
+  assert.equal(DOOR_ACTION_RULES.break.durationTurns, 2);
+  assert.equal(DOOR_ACTION_RULES.break.strength, 3);
+  for (const action of ["open", "close", "lock", "unlock"] as const) {
+    assert.equal(DOOR_ACTION_RULES[action].durationTurns, 1);
+    assert.equal(DOOR_ACTION_RULES[action].strength, 1);
+  }
+  assert.equal(doorStateAfterAction("break"), "broken");
+  assert.equal(doorStateAfterAction("unlock"), "closed");
+  assert.equal(matchCommandSchema.safeParse({
+    type: "door-action", slot: 0, target: { q: 1, r: 0, direction: 6 }, action: "open",
+  }).success, false);
+  assert.equal(matchCommandSchema.safeParse({
+    type: "door-action", slot: 0, target: { q: 1, r: 0, direction: 0 }, action: "open", durationTurns: 0,
+  }).success, false);
+});
+
+test("window action contracts validate costs, availability and held commands without adding locks", () => {
+  assert.equal(DOOR_ACTION_RULES["jump-window"].durationTurns, 1);
+  assert.equal(DOOR_ACTION_RULES["jump-window"].dexterity, 2);
+  const option = { slot: 0, q: 1, r: 0, direction: 0, action: "jump-window" };
+  assert.equal(doorActionOptionSchema.parse(option).available, true);
+  assert.equal(doorActionOptionSchema.parse({ ...option, available: false }).available, false);
+  assert.equal(doorActionOptionSchema.safeParse({ ...option, available: "false" }).success, false);
+  assert.equal(activeDoorActionSchema.parse({ ...option, startedTurn: 2 }).action, "jump-window");
+  for (const type of ["door-action", "cancel-door-action"]) {
+    assert.equal(matchCommandSchema.safeParse({
+      type, slot: 0, target: { q: 1, r: 0, direction: 0 }, action: "jump-window",
+    }).success, true);
+  }
+  assert.equal(matchCommandSchema.safeParse({
+    type: "door-action", slot: 0, target: { q: 1, r: 0, direction: 0 }, action: "lock-window",
+  }).success, false);
+});
 
 function terrainModule(): TerrainModule {
   return {
@@ -479,7 +526,7 @@ test("lobby snapshots cannot accidentally include hidden world data", () => {
 
 test("touch circles follow the actual token diameter through increasing and decreasing scales", () => {
   for (const scale of [1, 2, 0.5, 1.5, 2, 1]) {
-    const diameter = 64 * scale;
+    const diameter = 40 * scale;
     const circle = tokenHitCircle(diameter);
     assert.deepEqual(circle, { x: diameter / 2, y: diameter / 2, radius: diameter / 2 });
     assert.ok(Math.hypot(diameter / 2 - circle.x, diameter / 2 - circle.y) <= circle.radius);
@@ -498,7 +545,7 @@ test("all six hexagon sides are at least 1.2 token diameters at every scale", ()
   for (const scale of [0.5, 1, 1.5, 2]) {
     for (const ratio of [1.2, 1.5, 2]) {
       const dimensions = cellDimensions(scale, ratio);
-      assert.equal(dimensions.tokenDiameter, 64 * scale);
+      assert.equal(dimensions.tokenDiameter, 40 * scale);
       assert.equal(dimensions.side, ratio * dimensions.tokenDiameter);
       const corners = hexCorners({ x: 0, y: 0 }, dimensions.radius);
       for (let direction = 0; direction < 6; direction++) {
@@ -647,7 +694,7 @@ test("the playable area reserves all eight player sectors at each viewport size"
   assert.deepEqual(boardArea(100, 100), { x: 18, y: 30, width: 64, height: 40 });
   for (const scale of [0.5, 1, 2]) {
     assert.deepEqual(boardArea(1920, 1200, scale), area);
-    assert.equal(cellDimensions(scale).tokenDiameter, 64 * scale);
+    assert.equal(cellDimensions(scale).tokenDiameter, 40 * scale);
   }
   assert.ok(area.width * area.height > 1616 * 896);
   assert.deepEqual(boardArea(0, 0), { x: 0, y: 0, width: 0, height: 0 });

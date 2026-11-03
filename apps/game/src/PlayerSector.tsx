@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from "react";
 import {
   availableAttributePoints, PLAYER_COLORS, rotatePlayerName,
   type Attributes, type AttributeName, type MatchSnapshot, type PlayerColor,
+  type MatchCommand, type DoorActionOption, type ActiveDoorAction,
 } from "@terror/contracts";
 import { TouchButton } from "./TouchButton.js";
 import { AttributeIcon, TabIcon } from "./Icons.js";
@@ -9,6 +10,7 @@ import { LetterWheel } from "./LetterWheel.js";
 import { SectorDialog } from "./SectorDialog.js";
 import { CalibrationToken } from "./TokenVisual.js";
 import { ColorPicker } from "./ColorPicker.js";
+import { DoorActions } from "./DoorActions.js";
 
 const attributeLabels: { attribute: AttributeName; label: string }[] = [
   { attribute: "strength", label: "Força" },
@@ -23,7 +25,7 @@ const tabs = [
 type Tab = "game" | typeof tabs[number]["tab"];
 type Dialog = "join" | "leave" | AttributeName | null;
 
-export function PlayerSector({ slot, name, color, reservedColors, attributes, error, canEnter, scale, phase, ready, resumeReady, moving, controllable, busy, onEnter, onLeave, onClearError, onAttribute, onScale, onReady, onPause, onResume }: {
+export function PlayerSector({ slot, name, color, reservedColors, attributes, error, canEnter, scale, phase, ready, resumeReady, moving, controllable, busy, doorActions, activeDoorAction, simulationTurns, onCommand, onEnter, onLeave, onClearError, onAttribute, onScale, onReady, onPause, onResume }: {
   slot: number;
   name: string | undefined;
   color: PlayerColor | undefined;
@@ -38,6 +40,10 @@ export function PlayerSector({ slot, name, color, reservedColors, attributes, er
   moving: boolean;
   controllable: boolean;
   busy: boolean;
+  doorActions: DoorActionOption[];
+  activeDoorAction: ActiveDoorAction | undefined;
+  simulationTurns: number;
+  onCommand: (command: MatchCommand) => void;
   onEnter: (name: string, color: PlayerColor) => void;
   onLeave: () => void;
   onClearError: () => void;
@@ -128,13 +134,16 @@ export function PlayerSector({ slot, name, color, reservedColors, attributes, er
                         <span aria-hidden="true">{resumeReady ? "☑" : "☐"}</span> Pronto para retomar
                       </TouchButton>
                     )}
+                    {doorActions.length > 0 && <DoorActions options={doorActions} active={activeDoorAction}
+                      simulationTurns={simulationTurns} strength={attributes.strength} dexterity={attributes.dexterity} paused={phase === "paused"}
+                      disabled={moving || !controllable || (busy && !activeDoorAction)} onCommand={onCommand} />}
                   </div>
                 )}
                 {shownTab === "token" && (
                   <div className="calibration-controls">
                     <TouchButton aria-label={`Diminuir escala compartilhada de ${identity}`}
                       disabled={busy || scale <= 0.5} onPress={() => onScale(-0.05)}>−</TouchButton>
-                    <CalibrationToken name={identity} attributes={attributes} color={color ?? PLAYER_COLORS[0]!.id} />
+                    <CalibrationToken name={identity} color={color ?? PLAYER_COLORS[0]!.id} />
                     <TouchButton aria-label={`Aumentar escala compartilhada de ${identity}`}
                       disabled={busy || scale >= 2} onPress={() => onScale(0.05)}>+</TouchButton>
                   </div>

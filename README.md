@@ -38,6 +38,13 @@ aqui prevalecem sobre alternativas antigas dessa proposta.
 - [x] Garantir caminho externo da porta, sortear 0–3 janelas sem contato com
   ela e posicionar o receptor de item fora das células com passagens.
 - [x] Configurar cada lado do hexágono como pelo menos 1,2 diâmetro do token.
+- [x] Reduzir o token base para 40 px, sem indicadores internos, com borda e
+  nome centralizado com contorno; miniatura fixa de 40 px.
+- [x] Ações contextuais de porta por pressão contínua, com progresso no botão
+  e animação no mapa: abrir/fechar, trancar/destrancar por dentro e arrombar.
+- [x] Arrombar visível sem força suficiente, mas cinza; salto de janela por
+  pressão contínua, com destreza mínima 2 e destino validado pelo servidor.
+- [ ] Validar tokens de 40 px e ações por pressão contínua no tablet.
 - [ ] Definir regras dos objetivos antes de validar sua alcançabilidade.
 - [ ] Validar visualmente a casa e o mapa combinado no tablet.
 
@@ -110,7 +117,7 @@ fecha ao selecionar qualquer cor e desativa as escolhidas por outros jogadores.
 O servidor rejeita atomicamente nomes e cores duplicados; o token e sua
 miniatura usam o fundo escolhido, com texto contrastante.
 Setores reservam 96 px CSS, independentemente da escala, em vez de 116–140 px.
-A miniatura interna mede sempre 64 px; somente tokens externos e terrenos escalam.
+A miniatura interna mede sempre 40 px; somente tokens externos e terrenos escalam.
 Atributos usam
 ícones com explicação provisória em modal interno, contador verde +3/+2/+1/+0 e
 alerta vermelho na aba enquanto faltam pontos a distribuir. O painel de atributos
@@ -132,10 +139,10 @@ Após um relato de falha com tokens grandes, a zona Phaser passou a atualizar
 seu círculo de toque ao redimensionar. No reteste físico posterior, o usuário
 confirmou que o fluxo funcionou. Enquanto o próprio token está pressionado, todo o setor fica bloqueado,
 muda para a aba de jogo e mostra caminhada animada com explicação.
-Tokens e calibração mostram o nome de três letras no centro, com três
-marcadores por atributo: punho, pé em movimento e lâmpada. Nesta etapa ficam
-vazios, pois o consumo real dos atributos ainda não está implementado; pontos
-configurados não significam atributos em uso.
+Tokens e calibração mostram somente o disco na cor escolhida, borda contrastante
+e nome de três letras centralizado vertical/horizontalmente com contorno.
+Os indicadores de atributo foram retirados do token; os atributos continuam na
+configuração e nos requisitos numéricos dos botões de ação.
 Os tokens dos setores 5 e 7 começam diante de seus próprios setores; os setores
 laterais 4 e 8 foram girados em mais 180° para leitura por quem está fora da mesa.
 As duas dicas verticais externas à central também receberam mais 180°,
@@ -161,17 +168,29 @@ o botão de cor aleatória e o modal de cores, incluindo a cor atual destacada.
 Depois, o usuário confirmou o aceite físico do checklist no tablet e informou
 que tudo funcionou.
 
-**Próxima etapa:** implementar ações autoritativas de porta e janela sobre a
-casa criada, após conferir visualmente no tablet a nova geometria e disposição.
-A duração real de um turno foi definida em 1000 ms por padrão,
-configurável por `TURN_DURATION_MS`; a movimentação e o relógio de simulação
-agora usam turnos. Requisitos já definidos para essa etapa: abrir/fechar porta
-em 1 turno; quebrar porta trancada em 2 turnos com força 3 e deixá-la
-permanentemente aberta; saltar janela em 1 turno com destreza mínima 2. A porta
-da casa atual começa aberta ou fechada, nunca trancada. O botão multitoque e o
-bloqueio de ação durante o arrasto já têm teste automatizado. Movimento,
-névoas, multitoque e bloqueio por barreiras foram testados no tablet; a nova
-casa ainda precisa de aceite visual físico. Ao criar/combinar vários terrenos,
+**Próxima etapa:** validar no tablet o token de 40 px, a casa e as ações de porta
+e janela por pressão contínua. O salto já é autoritativo: custa 1 turno, aparece
+com destreza mínima 2 e atravessa a janela por dentro ou por fora. Sem célula
+transitável e conexão compatível do outro lado, o botão aparece cinza e não
+permite saltar. Janelas continuam sem trava e bloqueiam o arrasto comum mesmo
+depois de um salto. A duração do turno permanece 1000 ms por padrão,
+configurável por `TURN_DURATION_MS`. Abrir/fechar a porta leva 1 turno de
+pressão contínua. Trancar e destrancar levam 1 turno e só aparecem por dentro;
+arrombar exige porta trancada, força 3 e 2 turnos, deixando-a permanentemente
+aberta. Arrombar aparece também para quem não tem força 3, mas fica cinza.
+As opções aparecem no painel de jogo quando o token ocupa a célula da
+porta por dentro ou sua vizinha imediata por fora. É preciso soltar o token
+antes de iniciar; durante a ação não é possível arrastá-lo. Soltar o botão,
+cancelar o toque, sair da área do botão, perder foco ou desconectar cancela a
+ação sem efeito parcial. A pausa congela o progresso enquanto a pressão for
+mantida; soltar durante a pausa também cancela. Uma porta aceita uma ação por
+vez, assim como cada janela. O fundo do botão mostra o progresso autoritativo
+e um pulso na porta ou janela visível indica a conclusão. O salto move o token
+para o centro da célula oposta somente ao concluir. A porta começa aberta ou
+fechada, nunca trancada.
+Movimento, névoas, multitoque e bloqueio por barreiras tiveram aceite anterior
+no tablet; a nova geometria e as ações ainda precisam de aceite físico.
+Ao criar/combinar vários terrenos,
 ampliar os testes de colisão. Antes de validar alcançabilidade, definir as
 regras do primeiro objetivo e suas dependências; a exigência de força 2 para
 combustível continua sendo proposta, não decisão.
@@ -261,22 +280,22 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
   foco de teclado contido e controles de fundo inativos. Erros de entrada/ação
   mudam apenas a borda para vermelho; detalhes são anunciados por `role=alert`
   sem texto visível adicional nem alteração do fundo.
-- Uma miniatura de 64 px CSS, incluindo a borda de indicadores, acompanha
+- Uma miniatura de 40 px CSS, incluindo a borda, acompanha
   os controles de calibração, sem aumentar/reduzir dentro do setor.
 - O multiplicador é compartilhado: quando alguém ajusta, todos os tokens
   externos e elementos do terreno ajustam proporcionalmente. O tamanho para
   o dedo deve ser conferido no token externo, não na miniatura fixa.
 - Trata-se da escala interna do jogo, não do zoom do navegador.
-- Diâmetro máximo inicial do token: **64 pixels CSS**, incluindo todos os
-  indicadores de status desenhados dentro da borda, sem aumentar sua dimensão.
+- Diâmetro base do token: **40 pixels CSS**, sem ícones de ação/atributo;
+  borda contrastante e letras com contorno permanecem dentro desse diâmetro.
 - Cada um dos seis lados mede `HEX_SIDE_TOKEN_RATIO` vezes o diâmetro do token;
   o `.env`, o exemplo, o gerador de configuração e o Compose usam **1,2** por
-  padrão, também o mínimo aceito. Para escala `s` e razão `k`, token = `64s`,
-  lado = raio até a ponta = `64sk`, distância entre lados opostos =
-  `sqrt(3) × 64sk`, altura = `128sk` e folga lateral =
-  `(sqrt(3) × 64sk - 64s) / 2`. Com `s=1` e `k=1,2`, lado = `76,8` px,
-  largura ≈ `133,02` px e altura = `153,6` px. Cliente e servidor compartilham
-  a razão autoritativa no snapshot; as células maiores reduzem a capacidade.
+  padrão, também o mínimo aceito. Para escala `s` e razão `k`, token = `40s`,
+  lado = raio até a ponta = `40sk`, distância entre lados opostos =
+  `sqrt(3) × 40sk`, altura = `80sk` e folga lateral =
+  `(sqrt(3) × 40sk - 40s) / 2`. Com `s=1` e `k=1,2`, lado = `48` px,
+  largura ≈ `83,14` px e altura = `96` px. Cliente e servidor compartilham
+  a razão autoritativa no snapshot; tokens maiores reduzem a capacidade.
 - Primeiro calcular a célula; depois encaixar componentes completos de sete
   células na área útil. Nunca reduzir células automaticamente para caber mais.
 - A prévia usa uma malha de componentes sem células sobrepostas e apenas
@@ -320,12 +339,8 @@ tokens com movimento simultâneo e obstáculos simples no tablet real.
 - A dica do walkie-talkie comunica uma regra temática de comunicação entre
   amigos; não exige implementar chat de voz.
 - O SVG do walkie-talkie foi desenhado com base na silhueta anexada pelo usuário.
-  Ícones de atributos são SVGs próprios. Marcadores do token compartilham os
-  mesmos traçados no Phaser e na calibração: punho e lâmpada redesenhados das
-  referências fornecidas, pé em movimento conforme SVG fornecido pelo usuário.
-  Vazios têm contorno; destreza vazia não tem traços de movimento e inteligência
-  vazia não tem raios. O estado em uso preenche o desenho e adiciona esses traços,
-  mas só será ativado quando existir consumo autoritativo dos atributos.
+  Ícones de atributos e relógio são SVGs próprios. Tokens e calibração não
+  contêm mais marcadores internos de atributo.
   Controle de jogo e saída usam
   os traçados indicados do SVG Silh: [controle](https://svgsilh.com/image/2022084.html)
   e [saída](https://svgsilh.com/image/1152114.html), publicados sob
@@ -627,6 +642,10 @@ npm run compose -- stop
 - Módulos autorados com conexões de borda compatíveis e tipos de terreno.
 - Gerar a disposição dinamicamente após seleção e calibração dos jogadores.
 - Separar coordenadas lógicas hexagonais das coordenadas de renderização.
+- Manter módulos de sete hexágonos; não migrar para 19 nem mudar a malha.
+  Na futura etapa de arte, ocultar as linhas da grade e desenhar a casa por cima
+  da área das sete células, usando as bordas reais de portas/janelas como guia.
+  Essa arte ainda não foi criada; a grade provisória permanece nesta entrega.
 - Validar encaixes, colisões, entradas e caminhos até os objetivos.
 - Validar também requisitos de itens e atributos: conectividade geométrica
   sozinha não garante que uma partida seja solucionável.
@@ -663,27 +682,18 @@ npm run compose -- stop
   Níveis 2/3 ficam verdes. O componente `TouchButton` oferece um indicador
   vermelho absoluto no canto superior direito, usado na aba de atributos
   enquanto houver pontos livres, sem depender de um texto visível.
-- A distribuição é independente por jogador e atualiza o token de calibração
-  e o token no tabuleiro. O servidor valida e mantém o estado em memória;
+- A distribuição é independente por jogador e define os requisitos das ações,
+  sem adicionar ícones ao token. O servidor valida e mantém o estado em memória;
   não grava movimentos/atributos da partida ativa no PostgreSQL.
 - A proposta associa força a sons emitidos, destreza a cansaço e inteligência
   a comportamento desastrado. Fórmulas e a direção dessas compensações ainda
   precisam ser esclarecidas antes de implementar o balanceamento.
 - Força também influencia a representação de altura do personagem, sem romper
   a calibração compartilhada do token circular.
-- Indicadores na borda interna do token mostram níveis exigidos e utilizados,
-  sempre dentro do diâmetro máximo calibrado.
-- Referência visual fornecida pelo usuário: disco central azul e faixas em arco
-  na periferia para força, destreza, inteligência e demais status. As áreas
-  vermelha, verde e roxa do exemplo representam regiões de indicadores; a
-  associação definitiva entre cores e atributos ainda não foi escolhida.
-- O diâmetro externo de toda a composição (centro mais faixas) é `64s` pixels
-  CSS no tabuleiro e 64 px fixos na miniatura do setor. As faixas ocupam parte
-  do disco, não um anel extra fora do token. Centro,
-  espessura das faixas e ícones escalam proporcionalmente.
-- Mostrar os níveis em uso com preenchimento/segmentos e ícones identificáveis,
-  sem depender exclusivamente de cor. O desenho de referência define o formato,
-  não implementa nem altera fórmulas de atributos.
+- A referência anterior com faixas e indicadores internos foi substituída pelo
+  token simples de `40s` pixels CSS no tabuleiro e 40 px fixos na miniatura.
+  Requisitos aparecem no botão de ação com ícone seguido do número, sem repetir
+  ícones para representar valores; o nome do token mantém contorno e alinhamento central.
 - O arrasto mede a velocidade solicitada pelo dedo. Ao exceder a permitida,
   o token fica para trás/parado enquanto a solicitação permanecer acima do
   limite; não simplesmente acelerar o token para alcançar o dedo.
@@ -816,19 +826,18 @@ desligado sem interromper jogo/servidor.
 
 ### 2. Mesa multitoque e calibração — implementada e aceita no tablet
 
-- [x] Oito setores, entrada, seleção básica e círculo com borda de indicadores.
+- [x] Oito setores, entrada, seleção básica e círculo com borda contrastante.
 - [x] Fullscreen e áudio autorizados por gesto; liberar arrasto ao cancelar
   ponteiros ou perder foco.
 - [x] Escala compartilhada e cálculo da área útil, inclusive em resize.
 - [x] Arrasto com identificação independente de ponteiros.
 - [x] Dicas de preparação nas quatro orientações, incluindo walkie-talkie.
-- [x] Token com nome no disco central e marcadores internos por ícones,
+- [x] Token de 40 px com nome centralizado com contorno e sem marcadores internos,
   sem ultrapassar o diâmetro calibrado.
 - [x] Setores com abas de token e personagem; controles ativados por ponteiro,
   sem depender de cliques sintetizados em gestos multitoque.
-- [x] Distribuição de três pontos, base 1/1/1 e limites 1–3, com reembolso,
-  contador individual. Tokens agora usam nomes e marcadores de uso por ícones,
-  em vez dos antigos indicadores F/D/I de pontos configurados.
+- [x] Distribuição de três pontos, base 1/1/1 e limites 1–3, com reembolso
+  e contador individual; requisitos das ações são exibidos nos botões.
 - [x] Quatro dicas externas à central e setores compactos; atributos em quatro
   colunas com ícones, contador +N e destaque verde dos níveis alocados.
 - [x] Remover a instrução textual de arrasto/calibração da preparação.
@@ -851,6 +860,8 @@ simultâneos, troca de aba, toque sem duplicação e cancelamento. Em 2026-11-01
 o usuário confirmou que concluiu o checklist físico no tablet — incluindo os
 novos controles de atributos, nomes de três letras, cores, navegação, modais,
 fullscreen, áudio e dez contatos — e informou que tudo funcionou.
+Esse aceite é anterior à redução para 40 px e aos botões por pressão contínua;
+o reteste físico dessas alterações continua pendente.
 
 ### 3. Início, capítulo e pausa — implementada na geometria atual e aceita no tablet
 
@@ -942,18 +953,31 @@ não executar durante uma partida ativa.
 
 - [x] Botão de jogo multitoque reutilizável e bloqueio centralizado de ações
   enquanto o próprio token está pressionado.
-- [ ] Durações, multiplicadores, cancelamento e requisitos cooperativos.
-- [ ] Portas, obstáculo simples, inventário e item básico.
+- [x] Pressão contínua para portas, duração/cancelamento autoritativos, progresso
+  no fundo do botão e animação de conclusão no mapa.
+- [x] Abrir/fechar em 1 turno; trancar/destrancar por dentro em 1 turno;
+  arrombar somente porta trancada em 2 turnos com força 3, sem fechar novamente.
+- [x] Arrombar cinza sem força 3; pular janela por dentro/fora em 1 turno com
+  destreza mínima 2, cinza quando não houver destino transitável conectado.
+- [ ] Multiplicadores de duração e requisitos cooperativos.
+- [ ] Inventário e item básico.
 
 `TouchButton` fornece o controle multitoque reutilizável; o servidor rejeita
 comandos de ação do jogador cujo token está pressionado. Teste unitário verifica
 o bloqueio das ações desse jogador sem bloquear os controles de outro.
-As interações de terreno ficam para depois da confecção dos terrenos. Quando
-implementadas, suas durações serão expressas em turnos. O turno dura 1000 ms
-por padrão, configurável por `TURN_DURATION_MS`. Na casa criada, abrir/fechar
-a porta custará um turno; quebrar uma porta trancada custará dois turnos,
-exigirá força 3 e impedirá fechá-la novamente; saltar a janela custará um
-turno e exigirá destreza 2. A porta desta casa não começa trancada.
+As ações de porta usam regras compartilhadas e estados `open`, `closed`,
+`locked` e `broken`; o servidor valida proximidade, lado, força, exclusividade
+por porta e posse do jogador, sem confiar em duração/progresso enviados pelo
+cliente. Cada cancelamento identifica porta e ação para não interromper outra
+operação. Pausa congela o tempo; desconexão/saída cancelam as ações do jogador.
+O turno dura 1000 ms por padrão, configurável por `TURN_DURATION_MS`.
+O salto de janela reutiliza os mesmos comandos, pressão contínua, progresso,
+cancelamento e exclusividade. Seu botão aparece a partir de destreza 2 nas
+células imediatamente interna/externa; leva 1 turno e só move ao concluir.
+O servidor valida célula transitável, conectores recíprocos e ausência de
+barreira oposta. Janela sem saída permanece visível como ação cinza, sem salto;
+janelas não podem ser trancadas e continuam bloqueando movimento por arrasto.
+A porta desta casa não começa trancada. Inventário e cooperação não foram implementados.
 
 **Aceite:** combinar gesto e ação rejeita apenas a ação daquele jogador;
 cooperação válida funciona; pausa preserva a duração restante.
@@ -1015,6 +1039,8 @@ sem duplicar controladores ou expor informações ocultas.
 
 | Data | Entrega | Verificação |
 |---|---|---|
+| 2026-11-03 | Arrombar permanece visível para jogadores próximos sem força 3, agora explicitamente cinza. Salto autoritativo de janela por dentro/fora em 1 turno, com botão a partir de destreza 2, pressão contínua, progresso, cancelamento e pulso na janela visível; token muda para a célula oposta ao concluir. Sem destino transitável conectado, o botão aparece cinza e o servidor rejeita a ação. Janelas sem trava, ainda bloqueando arrasto comum. | `npm test` (24 contratos, 22 servidor, 5 jogo), `npm run typecheck`, `npm run build`, integração no PostgreSQL isolado (`npm run compose -- --profile test run --build --rm integration`, 2 testes incluindo salto via Socket.IO) e `git diff --check` passaram. Mapas de teste com seed fixa verificam destreza 1/2/3, ida/volta, janela para fora do mapa, limiar de 1 turno configurado para 2000 ms, pausa, cancelamento, bloqueio de arrasto, exclusividade e desconexão. Navegador isolado verificou arrombar cinza, salto oculto com destreza 1, custos numéricos 1/2 com destreza 2, progresso de 50%, cancelamento por mouse/teclado, pausa, token pressionado, destino indisponível cinza sem envio de comando e pulso de conclusão também para observador, sem erros JavaScript na página limpa. Serviços da partida preservados, sem publicação; aceite físico pendente. Próxima etapa: validar tokens, casa, portas e janelas no tablet. |
+| 2026-11-03 | Token base reduzido de 64 para 40 px, sem ícones internos, com borda e nome centralizado com contorno; miniatura fixa de 40 px e geometria/área de toque compartilhadas. Ações contextuais da porta no painel do jogador: abrir/fechar em 1 turno, trancar/destrancar somente por dentro em 1 turno e arrombar somente porta trancada em 2 turnos com força 3, permanecendo aberta. Pressão contínua com progresso no fundo do botão, cancelamento identificado por porta/ação, pausa congelando o tempo e pulso visual na porta ao concluir. Mantidos os módulos de sete hexágonos; futura arte cobrirá a grade, alinhada às bordas reais de portas/janelas. | `npm test` (23 contratos, 20 servidor, 5 jogo), `npm run typecheck`, `npm run build`, `npm run compose -- config --quiet`, integração no PostgreSQL isolado (`npm run compose -- --profile test run --build --rm integration`, 2 testes incluindo ações via Socket.IO) e `git diff --check` passaram. Testes cobrem cancelamento, tempo/pausa, lado/proximidade, força, exclusividade, posse, desconexão/saída e passagem após arrombar. Navegador isolado verificou miniatura 40 px, token 40→80 px com toque proporcional, ausência de ícones, nome central com contorno, custos numéricos 2/3, progresso de 50%, pressão por mouse/teclado, cancelamentos, independência de outro ponteiro/foco, pausa e pulso de conclusão; repetição em página limpa sem erros JavaScript. Banco de teste removido e servidor temporário encerrado; serviços da partida preservados, sem publicação. Próxima etapa: aceite no tablet dos tokens/casa/portas e depois salto de janela (ainda não implementado). |
 | 2026-11-03 | Painel central oculto ao iniciar o capítulo e durante a partida; retorna na pausa. Apresentação breve do capítulo e avisos de erro/conexão preservados sem título/prévia durante o jogo. | `npm run typecheck -w @terror/game` e `npm run build -w @terror/game` passaram. Navegador isolado com Socket.IO simulado verificou preparação, contagem, capítulo sem painel, partida sem painel, pausa/contagem de retomada, retomada, erro explícito e desconexão/reconexão. Servidor da partida preservado, sem publicação; aceite físico pendente. Próxima etapa permanece conferir a casa no tablet e implementar ações de porta/janela. |
 | 2026-11-03 | Geometria compartilhada por `HEX_SIDE_TOKEN_RATIO=1.2`: cada lado mede pelo menos 1,2 diâmetro do token, sem reduzir células para caber. Porta obrigatoriamente ligada à rede exterior; casa com 0–3 janelas sorteadas, sem compartilhar vértices com a porta e podendo apontar para fora do mapa ou encostar entre si. Receptor `lost-item` sorteado em qualquer célula sem porta/janela, sem obrigação de ficar no centro; disposição preservada por seed no servidor. Rótulo provisório da casa somente fora de produção e sob a névoa. | `npm test` (22 contratos, 17 servidor, 5 jogo), `npm run typecheck`, `npm run build`, `npm run compose -- config --quiet`, integração API/Socket.IO no PostgreSQL isolado (`npm run compose -- --profile test run --build --rm integration`) e `git diff --check` passaram. Testes cobrem os seis lados, escalas/razões, seis rotações, retrato/paisagem, janelas externas/adjacentes, contato proibido com a porta e posições elegíveis do item. Navegador com tabuleiro isolado confirmou rótulo em desenvolvimento, remoção sem casa explorada e ausência em produção. Banco de teste removido e servidores temporários encerrados; serviços da partida preservados, sem publicação/reinício. Aceite físico no tablet e ações autoritativas de porta/janela continuam pendentes; próxima etapa é conferir visualmente a nova casa e então implementar essas ações. |
 | 2026-11-02 | Corrigido `.env.example` para declarar `BASE_MOVEMENT_CELLS_PER_TURN=0.5` explicitamente, em vez de mencionar a variável apenas em comentário. | Conferência da declaração e `git diff --check`; configuração local preservada. Próxima etapa permanece implementar as ações de porta e janela. |

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const BASE_TOKEN_DIAMETER = 64;
+export const BASE_TOKEN_DIAMETER = 40;
 export const DEFAULT_HEX_SIDE_TOKEN_RATIO = 1.2;
 export const hexSideTokenRatioSchema = z.number().finite().min(1.2);
 const sqrt3 = Math.sqrt(3);

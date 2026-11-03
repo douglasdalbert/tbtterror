@@ -6,6 +6,8 @@ import {
   allocateAttributePoint, generateTerrainMap, initialPlayerAttributes, playerAttributesSchema,
   matchCommandSchema, moveWithinTerrain, movementMultiplier, terrainLayout, terrainMapCells,
   visibleTerrainCellIndices, initialTokenPosition,
+  axialFromPoint, hexDirections, DOOR_ACTION_RULES, doorActionsForState, doorStateAfterAction,
+  type ActiveDoorAction, type DoorActionOption,
   type CommandResult, type MatchPlayer,
   type Catalog,
   type DoorState,
@@ -32,6 +34,7 @@ export class Match {
   #terrain: GeneratedTerrainMap | null = null;
   #terrainCells: ReturnType<typeof terrainMapCells> = [];
   #doorStates = new Map<string, DoorState>();
+  #activeDoorActions = new Map<number, ActiveDoorAction>();
   #blockedGateKeys = new Set<string>();
   #exploredTerrainCells = new Map<string, MatchSnapshot["exploredTerrainCells"][number]>();
   #visibleTerrainCellKeys: string[] = [];
@@ -41,6 +44,7 @@ export class Match {
   readonly #baseMovementCellsPerTurn: number;
   readonly #turnDurationMs: number;
   readonly #now: () => number;
+  readonly #newMapSeed: () => string;
 
   constructor(
     catalog: Catalog,
@@ -49,9 +53,11 @@ export class Match {
     baseMovementCellsPerTurn = BASE_MOVEMENT_CELLS_PER_TURN,
     turnDurationMs = DEFAULT_TURN_DURATION_MS,
     hexSideTokenRatio = DEFAULT_HEX_SIDE_TOKEN_RATIO,
+    newMapSeed: () => string = randomUUID,
   ) {
     this.#catalog = catalogSchema.parse(catalog);
     this.#now = now;
+    this.#newMapSeed = newMapSeed;
     this.#visionRadiusCells = playerVisionRadiusSchema.parse(visionRadiusCells);
     this.#baseMovementCellsPerTurn = movementSpeedSchema.parse(baseMovementCellsPerTurn);
     this.#turnDurationMs = turnDurationSchema.parse(turnDurationMs);
@@ -91,7 +97,74 @@ export class Match {
       baseMovementCellsPerTurn: this.#baseMovementCellsPerTurn,
       exploredTerrainCells: [...this.#exploredTerrainCells.values()],
       visibleTerrainCellKeys: this.#visibleTerrainCellKeys,
+      doorActions: [...this.#players.values()]
+        .filter((player) => !owner || this.#owners.get(player.slot) === owner)
+        .flatMap((player) => this.#doorOptions(player)),
+      activeDoorActions: [...this.#activeDoorActions.values()]
+        .filter((action) => !owner || this.#owners.get(action.slot) === owner),
     });
+  }
+
+  #doorOptions(player: MatchPlayer): DoorActionOption[] {
+    if (!["running", "paused"].includes(this.#phase)) return [];
+    const position = axialFromPoint(
+      player.position, this.#arena.width, this.#arena.height, this.#arena.scale, this.#arena.hexSideTokenRatio,
+    );
+    return this.#terrainCells.flatMap((cell) => cell.gates.flatMap((gate, direction): DoorActionOption[] => {
+      if (gate !== "door" && gate !== "window") return [];
+      const offset = hexDirections[direction]!;
+      const inside = position.q === cell.q && position.r === cell.r;
+      const outside = position.q === cell.q + offset.q && position.r === cell.r + offset.r;
+      if (!inside && !outside) return [];
+      if (gate === "window") {
+        if (player.attributes.dexterity < DOOR_ACTION_RULES["jump-window"].dexterity) return [];
+        return [{
+          slot: player.slot, q: cell.q, r: cell.r, direction, action: "jump-window",
+          available: this.#windowDestination(player, cell.q, cell.r, direction) !== undefined,
+        }];
+      }
+      const state = this.#doorStates.get(`${cell.q},${cell.r},${direction}`);
+      if (!state) throw new Error("Porta sem estado na partida.");
+      return doorActionsForState(state, inside).map((action) => ({
+        slot: player.slot, q: cell.q, r: cell.r, direction, action, available: true,
+      }));
+    }));
+  }
+
+  #windowDestination(player: MatchPlayer, q: number, r: number, direction: number) {
+    const position = axialFromPoint(
+      player.position, this.#arena.width, this.#arena.height, this.#arena.scale, this.#arena.hexSideTokenRatio,
+    );
+    const cell = this.#terrainCells.find((candidate) => candidate.q === q && candidate.r === r);
+    if (!cell?.traversable || cell.gates[direction] !== "window") return;
+    const offset = hexDirections[direction]!;
+    const neighbor = this.#terrainCells.find((candidate) => candidate.q === q + offset.q && candidate.r === r + offset.r);
+    if (!neighbor?.traversable || cell.connectors[direction] === null
+      || cell.connectors[direction] !== neighbor.connectors[(direction + 3) % 6]
+      || neighbor.gates[(direction + 3) % 6] !== null) return;
+    if (position.q === q && position.r === r) return neighbor;
+    if (position.q === neighbor.q && position.r === neighbor.r) return cell;
+  }
+
+  #completeDoorActions() {
+    for (const [slot, active] of this.#activeDoorActions) {
+      if (this.#simulationTurns - active.startedTurn + 1e-9 < DOOR_ACTION_RULES[active.action].durationTurns) continue;
+      if (active.action === "jump-window") {
+        const player = this.#players.get(slot);
+        const destination = player && this.#windowDestination(player, active.q, active.r, active.direction);
+        if (!player || !destination) throw new Error("O destino de um salto em andamento deixou de ser válido.");
+        const layout = this.#layout();
+        player.position = {
+          x: this.#arena.width / 2 + layout.width * (destination.q + destination.r / 2),
+          y: this.#arena.height / 2 + layout.radius * 1.5 * destination.r,
+        };
+        this.#lastMoveSimulationTurn.delete(slot);
+      } else {
+        this.#doorStates.set(`${active.q},${active.r},${active.direction}`, doorStateAfterAction(active.action));
+        this.#rebuildBlockedGates();
+      }
+      this.#activeDoorActions.delete(slot);
+    }
   }
 
   #refreshVision() {
@@ -144,7 +217,7 @@ export class Match {
     for (const cell of this.#terrainCells) {
       for (const [direction, gate] of cell.gates.entries()) {
         if (gate === "wall" || gate === "window"
-          || (gate === "door" && this.#doorStates.get(`${cell.q},${cell.r},${direction}`) !== "open")) {
+          || (gate === "door" && !["open", "broken"].includes(this.#doorStates.get(`${cell.q},${cell.r},${direction}`) ?? ""))) {
           this.#blockedGateKeys.add(`${cell.q},${cell.r},${direction}`);
         }
       }
@@ -167,6 +240,7 @@ export class Match {
       player.connected = false;
       player.pressed = false;
       player.ready = false;
+      this.#activeDoorActions.delete(slot);
     }
     if (["chapter", "running"].includes(this.#phase) && this.#players.size > 0) this.#pause();
     if (this.#phase === "paused") {
@@ -192,6 +266,7 @@ export class Match {
     }
     if (this.#phase === "running") {
       this.#simulationTurns += delta / this.#turnDurationMs;
+      this.#completeDoorActions();
       return true;
     }
     this.#remainingMs = Math.max(0, this.#remainingMs - delta);
@@ -264,6 +339,12 @@ export class Match {
     }
     const player = this.#players.get(command.slot);
     if (!player || this.#owners.get(command.slot) !== owner) return fail("Este jogador não pertence a este cliente.");
+    if (command.type === "cancel-door-action") {
+      const active = this.#activeDoorActions.get(command.slot);
+      if (active?.action === command.action && active.q === command.target.q && active.r === command.target.r
+        && active.direction === command.target.direction) this.#activeDoorActions.delete(command.slot);
+      return { ok: true };
+    }
     if (command.type === "release") {
       player.pressed = false;
       this.#lastMoveSimulationTurn.delete(command.slot);
@@ -305,11 +386,29 @@ export class Match {
     if (player.pressed) return fail("Não é possível executar ação enquanto em movimento.");
     if (command.type === "press") {
       if (!["lobby", "countdown", "running"].includes(this.#phase)) return fail("Movimento indisponível durante pausa ou capítulo.");
+      if (this.#activeDoorActions.has(command.slot)) return fail("Solte o botão da ação antes de mover o token.");
       player.pressed = true;
       this.#lastMoveSimulationTurn.set(command.slot, this.#simulationTurns);
       return { ok: true };
     }
+    if (command.type === "door-action") {
+      if (this.#phase !== "running") return fail("Ações de porta e janela disponíveis somente durante a partida em execução.");
+      if (this.#activeDoorActions.has(command.slot)) return fail("Este jogador já está executando uma ação.");
+      const option = this.#doorOptions(player).find(({ q, r, direction, action }) =>
+        q === command.target.q && r === command.target.r && direction === command.target.direction && action === command.action);
+      if (!option) return fail("Ação indisponível: confira sua posição, os atributos e o estado da passagem.");
+      if (!option.available) return fail("Não há caminho transitável do outro lado da janela.");
+      if (player.attributes.strength < DOOR_ACTION_RULES[option.action].strength) return fail("Arrombar a porta exige força 3.");
+      if (player.attributes.dexterity < DOOR_ACTION_RULES[option.action].dexterity) return fail("Pular a janela exige destreza 2.");
+      if ([...this.#activeDoorActions.values()].some((active) =>
+        active.q === option.q && active.r === option.r && active.direction === option.direction)) {
+        return fail("Outro jogador já está agindo nesta passagem.");
+      }
+      this.#activeDoorActions.set(command.slot, { ...option, startedTurn: this.#simulationTurns });
+      return { ok: true };
+    }
     if (command.type === "leave") {
+      this.#activeDoorActions.delete(command.slot);
       this.#players.delete(command.slot);
       this.#owners.delete(command.slot);
       this.#lastMoveSimulationTurn.delete(command.slot);
@@ -320,6 +419,7 @@ export class Match {
         this.#error = "";
         this.#terrain = null;
         this.#doorStates.clear();
+        this.#activeDoorActions.clear();
         this.#blockedGateKeys.clear();
         this.#exploredTerrainCells.clear();
         this.#remainingMs = 0;
@@ -357,7 +457,7 @@ export class Match {
             this.#arena.width,
             this.#arena.height,
             this.#arena.scale,
-            randomUUID(),
+            this.#newMapSeed(),
             undefined,
             this.#arena.hexSideTokenRatio,
           );
@@ -392,6 +492,7 @@ export class Match {
     this.#remainingMs = 0;
     this.#terrain = null;
     this.#doorStates.clear();
+    this.#activeDoorActions.clear();
     this.#blockedGateKeys.clear();
     this.#terrainCells = [];
     this.#terrainCells = [];

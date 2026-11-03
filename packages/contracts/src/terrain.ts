@@ -27,7 +27,7 @@ const identifierSchema = z.string().regex(/^[a-z][a-z0-9_-]*$/);
 const connectorSchema = identifierSchema.nullable();
 export const terrainGateSchema = z.enum(["wall", "door", "window"]);
 const gateSchema = terrainGateSchema.nullable();
-const doorStateSchema = z.enum(["open", "closed"]);
+export const doorStateSchema = z.enum(["open", "closed", "locked", "broken"]);
 
 export const terrainModuleCellSchema = z.strictObject({
   q: z.number().int(),
@@ -230,7 +230,7 @@ export function movementMultiplier(dexterity: number): number {
   return 1 + (level - 1) * 0.1;
 }
 
-function axialFromPoint(
+export function axialFromPoint(
   point: Point, width: number, height: number, scale: number, hexSideTokenRatio: number,
 ) {
   const dimensions = cellDimensions(scale, hexSideTokenRatio);

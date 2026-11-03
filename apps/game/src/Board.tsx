@@ -3,11 +3,12 @@ import Phaser from "phaser";
 import {
   BASE_MOVEMENT_CELLS_PER_TURN, DEFAULT_TURN_DURATION_MS, boardArea, cellDimensions, hexCorners,
   DEFAULT_HEX_SIDE_TOKEN_RATIO,
+  axialFromPoint, hexDirections,
   movementMultiplier, terrainLayout, tokenHitCircle,
   initialTokenPosition, PLAYER_COLORS,
   type PublicCatalog, type MatchSnapshot, type MatchCommand, type PlayerColor,
 } from "@terror/contracts";
-import { tokenMarkerPositions, tokenMarkerShapes } from "./TokenVisual.js";
+import { tokenTextOutline } from "./TokenVisual.js";
 
 const isProduction = import.meta.env.APP_NODE_ENV === "production";
 
@@ -47,7 +48,6 @@ class TerrainPreviewScene extends Phaser.Scene {
   #zones = new Map<number, Phaser.GameObjects.Zone>();
   #zoneDiameters = new Map<number, number>();
   #labels = new Map<number, Phaser.GameObjects.Text>();
-  #markers = new Map<number, Phaser.GameObjects.Image[]>();
   #dragging = new Map<number, { slot: number; offsetX: number; offsetY: number }>();
   #snapshot: MatchSnapshot | undefined;
   #interaction: BoardInteraction | undefined;
@@ -58,7 +58,6 @@ class TerrainPreviewScene extends Phaser.Scene {
     this.#graphics = this.add.graphics().setDepth(-2);
     this.#fogGraphics = this.add.graphics();
     this.#tokenGraphics = this.add.graphics();
-    this.createMarkerTextures();
     this.#scale = this.registry.get("previewScale");
     this.#players = this.registry.get("previewPlayers") ?? [];
     this.#snapshot = this.registry.get("matchSnapshot");
@@ -101,6 +100,7 @@ class TerrainPreviewScene extends Phaser.Scene {
   }
 
   changeMatch(snapshot: MatchSnapshot) {
+    const previous = this.#snapshot;
     const geometryChanged = !this.#layout || !this.#snapshot
       || this.#snapshot.arena.width !== snapshot.arena.width
       || this.#snapshot.arena.height !== snapshot.arena.height
@@ -127,6 +127,55 @@ class TerrainPreviewScene extends Phaser.Scene {
     }
     this.drawBoard(geometryChanged || terrainChanged);
     if (fogChanged || geometryChanged || terrainChanged) this.drawFog();
+    if (previous?.id === snapshot.id && !geometryChanged) this.animateDoorChanges(previous, snapshot);
+  }
+
+  private animateDoorChanges(previous: MatchSnapshot, snapshot: MatchSnapshot) {
+    const visible = new Set(snapshot.visibleTerrainCellKeys);
+    const before = new Map(previous.exploredTerrainCells.flatMap((cell) =>
+      cell.gates.flatMap((gate) => gate.kind === "door" ? [[`${cell.q},${cell.r},${gate.direction}`, gate.state] as const] : []),
+    ));
+    const layout = this.currentLayout();
+    for (const cell of snapshot.exploredTerrainCells) {
+      if (!visible.has(`${cell.q},${cell.r}`)) continue;
+      for (const gate of cell.gates) {
+        if (gate.kind === "door") {
+          const state = before.get(`${cell.q},${cell.r},${gate.direction}`);
+          if (!state || state === gate.state) continue;
+        } else if (gate.kind === "window") {
+          const offset = hexDirections[gate.direction]!;
+          const crossed = snapshot.players.some((player) => {
+            const old = previous.players.find((entry) => entry.slot === player.slot);
+            if (!old || (old.position.x === player.position.x && old.position.y === player.position.y)) return false;
+            const axial = (position: Position) => axialFromPoint(position, snapshot.arena.width,
+              snapshot.arena.height, snapshot.arena.scale, snapshot.arena.hexSideTokenRatio);
+            const from = axial(old.position);
+            const to = axial(player.position);
+            return (from.q === cell.q && from.r === cell.r && to.q === cell.q + offset.q && to.r === cell.r + offset.r)
+              || (to.q === cell.q && to.r === cell.r && from.q === cell.q + offset.q && from.r === cell.r + offset.r);
+          });
+          if (!crossed) continue;
+        } else continue;
+        const center = {
+          x: snapshot.arena.width / 2 + layout.width * (cell.q + cell.r / 2),
+          y: snapshot.arena.height / 2 + layout.radius * 1.5 * cell.r,
+        };
+        const corners = hexCorners(center, layout.radius);
+        const first = corners[(gate.direction + 5) % 6]!;
+        const second = corners[gate.direction]!;
+        const pulse = this.add.graphics().setDepth(-0.5);
+        this.tweens.addCounter({
+          from: 0, to: 1, duration: 800,
+          onUpdate: (tween) => {
+            const progress = tween.getValue() ?? 0;
+            pulse.clear().lineStyle(4 * this.#scale, 0x75d9f4, 1 - progress);
+            pulse.strokeCircle((first.x + second.x) / 2, (first.y + second.y) / 2,
+              layout.tokenDiameter * (0.25 + progress));
+          },
+          onComplete: () => pulse.destroy(),
+        });
+      }
+    }
   }
 
   moveToken(pointer: Phaser.Input.Pointer) {
@@ -242,6 +291,7 @@ class TerrainPreviewScene extends Phaser.Scene {
             const color = gate.kind === "wall" ? 0x17191b
               : gate.kind === "window" ? 0x91aab8 : 0x8b6842;
             graphics.lineStyle(lineWidth, color, gate.kind === "window" ? 0.5 : 0.95);
+            if (gate.kind === "door" && gate.state === "broken") continue;
             if (gate.kind === "door" && gate.state === "open") {
               // The open leaf must not narrow the full-side passage.
               graphics.lineBetween(
@@ -259,6 +309,10 @@ class TerrainPreviewScene extends Phaser.Scene {
               );
             } else {
               graphics.lineBetween(from.x, from.y, to.x, to.y);
+              if (gate.kind === "door" && gate.state === "locked") {
+                graphics.lineStyle(Math.max(1, this.#scale * 2), 0xf0c36a, 1);
+                graphics.strokeCircle((from.x + to.x) / 2, (from.y + to.y) / 2, this.#scale * 4);
+              }
             }
           }
           if (cell.objectSlots.includes("lost-item")) {
@@ -296,8 +350,6 @@ class TerrainPreviewScene extends Phaser.Scene {
       this.#positions.delete(slot);
       this.#labels.get(slot)?.destroy();
       this.#labels.delete(slot);
-      this.#markers.get(slot)?.forEach((marker) => marker.destroy());
-      this.#markers.delete(slot);
     }
     for (const [pointerId, drag] of this.#dragging) {
       if (!activeSlots.has(drag.slot)) {
@@ -320,12 +372,13 @@ class TerrainPreviewScene extends Phaser.Scene {
       if (!center) continue;
 
       if (!color) throw new Error(`Cor de token desconhecida: ${player.color}`);
+      const borderWidth = Math.max(1, diameter * 0.025);
+      const radius = (diameter - borderWidth) / 2;
       tokenGraphics.fillStyle(Number.parseInt(color.hex.slice(1), 16), 0.95);
-      tokenGraphics.fillCircle(center.x, center.y, diameter * 0.49);
-      tokenGraphics.lineStyle(Math.max(1, diameter * 0.025), Number.parseInt(color.text.slice(1), 16), 0.9);
-      tokenGraphics.strokeCircle(center.x, center.y, diameter * 0.49);
-      this.updateMarkers(slot, center, diameter);
-      this.updateLabels(slot, name, center, diameter, color.text);
+      tokenGraphics.fillCircle(center.x, center.y, radius);
+      tokenGraphics.lineStyle(borderWidth, Number.parseInt(color.text.slice(1), 16), 0.9);
+      tokenGraphics.strokeCircle(center.x, center.y, radius);
+      this.updateLabels(slot, name, center, diameter, color.text, tokenTextOutline(color.text));
       this.updateZone(slot, center, diameter);
     }
 
@@ -404,55 +457,12 @@ class TerrainPreviewScene extends Phaser.Scene {
     };
   }
 
-  private createMarkerTextures() {
-    for (const attribute of ["strength", "dexterity", "wisdom"] as const) {
-      for (const used of [false, true]) {
-        const canvas = document.createElement("canvas");
-        canvas.width = canvas.height = 100;
-        const context = canvas.getContext("2d");
-        if (!context) throw new Error("Não foi possível desenhar os indicadores do token.");
-        context.lineWidth = 4;
-        context.lineCap = "round";
-        context.lineJoin = "round";
-        context.strokeStyle = context.fillStyle = "#75d9f4";
-        const { body, details, activeExtras } = tokenMarkerShapes[attribute];
-        const shape = new Path2D(body);
-        if (used) context.fill(shape);
-        context.stroke(shape);
-        if (details && (used || attribute === "strength")) {
-          context.strokeStyle = used ? "#192d3d" : "#75d9f4";
-          context.stroke(new Path2D(details));
-        }
-        if (used && activeExtras) {
-          context.strokeStyle = "#75d9f4";
-          const extras = new Path2D(activeExtras);
-          if (attribute === "dexterity") context.fill(extras);
-          context.stroke(extras);
-        }
-        this.textures.addCanvas(`token-marker-${attribute}-${used ? "used" : "empty"}`, canvas);
-      }
-    }
-  }
-
-  private updateMarkers(slot: number, center: Position, diameter: number) {
-    const positions = tokenMarkerPositions();
-    let markers = this.#markers.get(slot);
-    if (!markers) {
-      markers = positions.map(({ attribute }) => this.add.image(0, 0, `token-marker-${attribute}-empty`));
-      this.#markers.set(slot, markers);
-    }
-    positions.forEach(({ x, y }, index) => {
-      markers[index]?.setPosition(center.x + (x - 32) * diameter / 64, center.y + (y - 32) * diameter / 64)
-        .setDisplaySize(diameter * 8.5 / 64, diameter * 8.5 / 64);
-    });
-  }
-
-  private updateLabels(slot: number, name: string, center: Position, diameter: number, textColor: string) {
+  private updateLabels(slot: number, name: string, center: Position, diameter: number, textColor: string, outline: string) {
     let label = this.#labels.get(slot);
     if (!label) {
       label = this.add.text(0, 0, name, {
           fontFamily: "system-ui, sans-serif",
-          fontSize: "8px",
+          fontSize: "12px",
           color: textColor,
           fontStyle: "bold",
         }).setOrigin(0.5);
@@ -460,8 +470,9 @@ class TerrainPreviewScene extends Phaser.Scene {
     }
     label.setText(name);
     label.setPosition(center.x, center.y);
-    label.setFontSize(Math.max(6, diameter * 0.125));
+    label.setFontSize(Math.max(6, diameter * 0.3));
     label.setColor(textColor);
+    label.setStroke(outline, Math.max(1, diameter * 0.05));
   }
 
   private updateZone(slot: number, center: Position, diameter: number) {
@@ -472,6 +483,7 @@ class TerrainPreviewScene extends Phaser.Scene {
         if (!this.#snapshot?.controlSlots.includes(slot)
           || !["lobby", "countdown", "running"].includes(this.#snapshot.phase)
           || this.#snapshot.players.find((p) => p.slot === slot)?.pressed
+          || this.#snapshot.activeDoorActions.some((action) => action.slot === slot)
           || [...this.#dragging.values()].some((d) => d.slot === slot)) return;
         const position = this.#positions.get(slot);
         if (!position) return;
