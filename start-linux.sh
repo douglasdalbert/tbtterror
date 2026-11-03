@@ -17,4 +17,4 @@ if [[ ! -f .env ]]; then
   node scripts/setup-env.mjs
 fi
 
-docker compose up --build -d --wait postgres server game
+bash scripts/compose.sh up --build -d --wait postgres server game

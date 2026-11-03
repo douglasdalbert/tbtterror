@@ -18,6 +18,7 @@ aqui prevalecem sobre alternativas antigas dessa proposta.
 - [x] Implementar a base técnica e validar o acesso LAN no tablet real.
 - [x] Implementar o fluxo local de seleção, calibração e tokens da etapa 2.
 - [x] Implementar início, capítulo e pausa autoritativos sobre a geometria atual.
+- [x] Usar `.env` como configuração prioritária e `.env.example` como fallback.
 - [x] Validar acesso LAN no tablet real.
 - [x] Corrigir falha de inicialização em HTTP da LAN e validar no navegador.
 - [x] Ocultar menu de jogo e configurações após o início, preservando os controles da partida.
@@ -29,6 +30,8 @@ aqui prevalecem sobre alternativas antigas dessa proposta.
 - [ ] Definir regras dos objetivos antes de validar sua alcançabilidade.
 
 **Estado:** etapas 2 e 3 tiveram o aceite físico confirmado pelo usuário.
+Na configuração, `.env` prevalece e `.env.example` completa variáveis ausentes;
+`POSTGRES_PASSWORD` precisa ser definido localmente.
 A etapa 4 tem quatro módulos iniciais tipados e geração determinística por seed,
 com encaixes conectados, rotações de 60° e dimensionamento pela área útil e
 escala. O servidor mantém o mapa completo; clientes não recebem a seed nem
@@ -310,11 +313,15 @@ npm ci
 `start-linux.sh` cria `.env` com segredos aleatórios e permissões restritas se
 ele ainda não existir, então recompila e inicia PostgreSQL, servidor e jogo,
 aguardando os serviços ficarem saudáveis. O script não inicia o admin opcional.
+Para comandos Compose manuais, use `npm run compose -- <argumentos>`; esse
+comando carrega `.env.example` primeiro e `.env` depois, então os valores de
+`.env` prevalecem e valores ausentes usam o exemplo. `docker compose` direto
+não aplica essa combinação.
 Para aplicar mudanças no `.env`, execute-o novamente; uma mudança que recrie o
 servidor encerra a partida em memória. O arquivo `.env` é ignorado por Git e
-pelo contexto Docker. Alternativamente, copiar `.env.example` para `.env` e
-substituir o placeholder da senha do PostgreSQL por um segredo de ao menos 32
-caracteres. Nunca versionar o arquivo real.
+pelo contexto Docker. `POSTGRES_PASSWORD` fica intencionalmente vazio no
+exemplo e deve ser definido em `.env` com um segredo de ao menos 32 caracteres;
+sem ele, o Compose recusa iniciar. Nunca versionar o arquivo real.
 
 - Jogo no notebook: `http://localhost:8080`.
 - Tablet: `http://<IP-LAN-do-notebook>:8080`, na mesma rede.
@@ -332,8 +339,14 @@ caracteres. Nunca versionar o arquivo real.
 
 ### Ambiente de execução
 
-- `.env`, `.env.example` e `setup:env` usam `NODE_ENV=development` por padrão.
-  O arquivo local existente foi atualizado sem alterar credenciais.
+- O `setup:env` cria `.env` com `NODE_ENV=development`; `.env.example` fornece
+  valores de fallback e atualmente exemplifica `NODE_ENV=production`. O arquivo
+  local prevalece sobre o exemplo; valores ausentes usam o exemplo.
+- Compose manual deve ser executado por `npm run compose -- ...`; o servidor
+  local carrega primeiro `.env.example` e depois `.env`. No Vite local, essa
+  precedência se aplica a `NODE_ENV`. Variáveis definidas no shell prevalecem.
+- `POSTGRES_PASSWORD` não tem fallback válido e precisa ser definido em `.env`;
+  o placeholder vazio no exemplo faz o Compose falhar explicitamente.
 - Decisões condicionais usam somente `NODE_ENV === "production"` ou sua
   negação; qualquer outro valor é não produção. Validar ambos os casos ao
   mudar comportamento condicionado ao ambiente.
@@ -343,20 +356,20 @@ caracteres. Nunca versionar o arquivo real.
 - Somente fora de produção aparece “Prévia · X terrenos · token Y px”.
   Erros de conexão, configuração, ações e mapa continuam visíveis em produção.
 - Após alterar o valor em `.env`, executar
-  `docker compose up --build -d --wait server game`; apenas reiniciar Nginx
+  `npm run compose -- up --build -d --wait server game`; apenas reiniciar Nginx
   não altera o valor incorporado no JavaScript. Não recriar o servidor durante
   uma partida. Para Vite local, reiniciar o processo de desenvolvimento.
 - Para verificar somente o jogo em produção sem reiniciar o servidor:
-  `NODE_ENV=production docker compose up --build --no-deps -d --wait game`.
+  `NODE_ENV=production npm run compose -- up --build --no-deps -d --wait game`.
   Depois restaurar o ambiente de `.env` com
-  `docker compose up --build --no-deps -d --wait game`.
+  `npm run compose -- up --build --no-deps -d --wait game`.
 
 ### Admin opcional
 
 ```sh
-docker compose --profile admin up --build -d --wait admin
+npm run compose -- --profile admin up --build -d --wait admin
 # Depois de usar:
-docker compose --profile admin stop admin
+npm run compose -- --profile admin stop admin
 ```
 
 Abrir `http://localhost:8081`, sem login, senha de painel ou token.
@@ -384,7 +397,7 @@ Desligar o container do admin não desliga jogo, API ou banco.
 - CRUDs futuros devem validar conteúdo e incrementar a revisão global na mesma
   transação. O servidor atual carrega sua cópia ao iniciar o lobby; carregar
   novamente ao iniciar cada nova partida será implementado com o ciclo de jogo.
-- `docker compose restart server` descarta o lobby em memória e carrega o
+- `npm run compose -- restart server` descarta o lobby em memória e carrega o
   conteúdo persistido, com nova identidade. Não existe salvamento de partida.
 - Não trocar a senha em `.env` esperando alterar a senha de um banco já
   inicializado; a rotação exige alterar também o usuário PostgreSQL.
@@ -406,8 +419,8 @@ services:
 A porta fica limitada ao host; não publicar o PostgreSQL na LAN.
 
 ```sh
-docker compose --profile admin stop admin server game
-docker compose -f compose.yaml -f compose.local.yaml up -d --wait postgres
+npm run compose -- --profile admin stop admin server game
+npm run compose -- -f compose.yaml -f compose.local.yaml up -d --wait postgres
 npm run build
 POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=5433 npm run dev:server
 # Em outros terminais:
@@ -427,8 +440,8 @@ com o Compose base, preservando o volume, e subir novamente os serviços.
 Encerrar primeiro os processos locais de desenvolvimento:
 
 ```sh
-docker compose up -d --force-recreate --wait postgres
-docker compose up --build -d --wait server game
+npm run compose -- up -d --force-recreate --wait postgres
+npm run compose -- up --build -d --wait server game
 ```
 
 Esse fluxo alternativo está documentado, mas o smoke test desta entrega usou
@@ -444,9 +457,9 @@ npm run check:stack
 # Com admin ligado:
 CHECK_ADMIN=1 npm run check:stack
 # Banco isolado e temporário para integração:
-docker compose --profile test run --build --rm integration
-docker compose --profile test stop postgres-test
-docker compose --profile test rm -f postgres-test
+npm run compose -- --profile test run --build --rm integration
+npm run compose -- --profile test stop postgres-test
+npm run compose -- --profile test rm -f postgres-test
 ```
 
 `npm test` não exige PostgreSQL. A integração usa um banco de teste com tmpfs,
@@ -470,9 +483,9 @@ Ao terminar, o admin fica parado. Não usar durante uma partida.
 Para inspeção operacional:
 
 ```sh
-docker compose ps
-docker compose logs --tail=50 server
-docker compose stop
+npm run compose -- ps
+npm run compose -- logs --tail=50 server
+npm run compose -- stop
 ```
 
 ### Resultados e limitações da etapa 1
@@ -848,7 +861,7 @@ células hexagonais por segundo; deve ser positivo e usa `0.5` por padrão. O
 servidor valida a configuração e a inclui no snapshot para que o limite visual
 do cliente permaneça sincronizado com o limite autoritativo. Para aplicar uma
 mudança no Compose, recriar o servidor com
-`docker compose up --build -d --wait server`; isso encerra a partida em memória, então
+`npm run compose -- up --build -d --wait server`; isso encerra a partida em memória, então
 não executar durante uma partida ativa.
 
 ### 6. Interações reutilizáveis
@@ -916,6 +929,7 @@ sem duplicar controladores ou expor informações ocultas.
 
 | Data | Entrega | Verificação |
 |---|---|---|
+| 2026-11-02 | `.env` passou a prevalecer sobre `.env.example`, que completa variáveis ausentes; fallback aplicado ao Compose, servidor local, Vite e verificações de stack. Senha de exemplo vazia e obrigatória no arquivo local. | `npm run typecheck`, `npm run build -w @terror/game`, `npm test`, `npm run compose -- config --quiet` e verificação de precedência do Node sem imprimir valores passaram. `check:lifecycle` não foi executado para evitar reiniciar serviços. |
 | 2026-10-31 | Arquitetura, requisitos e etapas consolidados; instruções para agentes criadas. | Revisão documental frente à proposta e às decisões da conversa; sem código executável nesta entrega. |
 | 2026-10-31 | Base técnica: quatro workspaces, Compose, migração/conteúdo mínimo, API/Socket.IO e admin opcional. | Build/typecheck, sete testes unitários, uma integração PostgreSQL, verificação HTTP/WebSocket, ciclo de vida do volume/admin/servidor e canvas no navegador. Tablet físico ainda pendente. |
 | 2026-10-31 | Token máximo 64 px, folga 8 px por lado, indicadores internos, prévia de vários terrenos proporcional e admin sem login. | Build/typecheck e dez testes unitários, incluindo encaixe sem sobreposição, contenção de células e redução de capacidade ao aumentar a escala. Calibração compartilhada e setores reais ainda pendentes. |

@@ -4,12 +4,22 @@ import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { parseEnv } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 import { matchSnapshotSchema } from "../packages/contracts/dist/index.js";
 
-const environment = parseEnv(await readFile(new URL("../.env", import.meta.url), "utf8"));
+const environment = {
+  ...parseEnv(await readFile(new URL("../.env.example", import.meta.url), "utf8")),
+  ...parseEnv(await readFile(new URL("../.env", import.meta.url), "utf8")),
+  ...process.env,
+};
 const url = process.env.GAME_URL ?? `http://127.0.0.1:${environment.GAME_PORT ?? 8080}`;
 const marker = `verification_${randomBytes(8).toString("hex")}`;
-const compose = (...args) => execFileSync("docker", ["compose", ...args], { encoding: "utf8" }).trim();
+const compose = (...args) => execFileSync("docker", [
+  "compose",
+  "--env-file", fileURLToPath(new URL("../.env.example", import.meta.url)),
+  "--env-file", fileURLToPath(new URL("../.env", import.meta.url)),
+  ...args,
+], { encoding: "utf8" }).trim();
 const sql = (query) => compose("exec", "-T", "postgres", "psql", "-U", "terror", "-d", "terror",
   "-v", "ON_ERROR_STOP=1", "-Atc", query);
 

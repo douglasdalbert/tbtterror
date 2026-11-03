@@ -7,7 +7,11 @@ import {
   adminOverviewSchema, publicCatalogSchema, healthSchema, matchSnapshotSchema,
 } from "../packages/contracts/dist/index.js";
 
-const environment = parseEnv(await readFile(new URL("../.env", import.meta.url), "utf8"));
+const environment = {
+  ...parseEnv(await readFile(new URL("../.env.example", import.meta.url), "utf8")),
+  ...parseEnv(await readFile(new URL("../.env", import.meta.url), "utf8")),
+  ...process.env,
+};
 const gameUrl = process.env.GAME_URL ?? `http://127.0.0.1:${environment.GAME_PORT ?? 8080}`;
 const adminUrl = process.env.ADMIN_URL ?? `http://127.0.0.1:${environment.ADMIN_PORT ?? 8081}`;
 

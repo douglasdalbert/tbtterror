@@ -7,7 +7,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/index.js",
-    "dev": "node --watch --env-file=../../.env dist/index.js",
+    "dev": "node --watch --env-file=../../.env.example --env-file-if-exists=../../.env dist/index.js",
     "watch": "tsc -p tsconfig.json --watch",
     "test": "node --test dist/test/unit.test.js",
     "test:integration": "node --test dist/test/integration.test.js"
