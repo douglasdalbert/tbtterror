@@ -44,6 +44,8 @@ aqui prevalecem sobre alternativas antigas dessa proposta.
   e animação no mapa: abrir/fechar, trancar/destrancar por dentro e arrombar.
 - [x] Arrombar visível sem força suficiente, mas cinza; salto de janela por
   pressão contínua, com destreza mínima 2 e destino validado pelo servidor.
+- [x] Todas as ações contextuais permanecem visíveis independentemente dos
+  atributos; sem os pontos exigidos, ficam cinza e desabilitadas.
 - [ ] Validar tokens de 40 px e ações por pressão contínua no tablet.
 - [ ] Definir regras dos objetivos antes de validar sua alcançabilidade.
 - [ ] Validar visualmente a casa e o mapa combinado no tablet.
@@ -169,8 +171,10 @@ Depois, o usuário confirmou o aceite físico do checklist no tablet e informou
 que tudo funcionou.
 
 **Próxima etapa:** validar no tablet o token de 40 px, a casa e as ações de porta
-e janela por pressão contínua. O salto já é autoritativo: custa 1 turno, aparece
-com destreza mínima 2 e atravessa a janela por dentro ou por fora. Sem célula
+e janela por pressão contínua. O salto já é autoritativo: custa 1 turno, exige
+destreza mínima 2 e atravessa a janela por dentro ou por fora. Todas as ações
+contextuais aparecem para os jogadores próximos; sem os atributos exigidos,
+ficam cinza e desabilitadas, inclusive pular a janela com destreza 1. Sem célula
 transitável e conexão compatível do outro lado, o botão aparece cinza e não
 permite saltar. Janelas continuam sem trava e bloqueiam o arrasto comum mesmo
 depois de um salto. A duração do turno permanece 1000 ms por padrão,
@@ -972,8 +976,10 @@ cliente. Cada cancelamento identifica porta e ação para não interromper outra
 operação. Pausa congela o tempo; desconexão/saída cancelam as ações do jogador.
 O turno dura 1000 ms por padrão, configurável por `TURN_DURATION_MS`.
 O salto de janela reutiliza os mesmos comandos, pressão contínua, progresso,
-cancelamento e exclusividade. Seu botão aparece a partir de destreza 2 nas
-células imediatamente interna/externa; leva 1 turno e só move ao concluir.
+cancelamento e exclusividade. Seu botão aparece nas células imediatamente
+interna/externa para todos, mas fica cinza e desabilitado sem destreza 2;
+leva 1 turno e só move ao concluir. A mesma regra de visibilidade vale para
+todas as ações: atributos insuficientes desabilitam, não ocultam.
 O servidor valida célula transitável, conectores recíprocos e ausência de
 barreira oposta. Janela sem saída permanece visível como ação cinza, sem salto;
 janelas não podem ser trancadas e continuam bloqueando movimento por arrasto.
@@ -1039,6 +1045,7 @@ sem duplicar controladores ou expor informações ocultas.
 
 | Data | Entrega | Verificação |
 |---|---|---|
+| 2026-11-03 | Regra unificada: atributos insuficientes nunca ocultam ações contextuais; todos os jogadores próximos veem os botões, cinza e desabilitados quando faltam pontos. Removidos os filtros de destreza da janela no servidor e na interface; o servidor continua rejeitando salto sem destreza 2. | Build do servidor e seus 22 testes (`npm run build -w @terror/server`, `npm run test -w @terror/server`), typecheck e build do jogo (`npm run typecheck -w @terror/game`, `npm run build -w @terror/game`) passaram. Navegador isolado confirmou arrombar e pular visíveis/cinza com força 1/destreza 1, sem comandos ao pressionar, e habilitados com força 3/destreza 2. `git diff --check` passou. Sem publicação nem reinício da partida; próxima etapa permanece aceite no tablet de tokens, casa, portas e janelas. Esta regra substitui a ocultação do salto registrada na entrega anterior. |
 | 2026-11-03 | Arrombar permanece visível para jogadores próximos sem força 3, agora explicitamente cinza. Salto autoritativo de janela por dentro/fora em 1 turno, com botão a partir de destreza 2, pressão contínua, progresso, cancelamento e pulso na janela visível; token muda para a célula oposta ao concluir. Sem destino transitável conectado, o botão aparece cinza e o servidor rejeita a ação. Janelas sem trava, ainda bloqueando arrasto comum. | `npm test` (24 contratos, 22 servidor, 5 jogo), `npm run typecheck`, `npm run build`, integração no PostgreSQL isolado (`npm run compose -- --profile test run --build --rm integration`, 2 testes incluindo salto via Socket.IO) e `git diff --check` passaram. Mapas de teste com seed fixa verificam destreza 1/2/3, ida/volta, janela para fora do mapa, limiar de 1 turno configurado para 2000 ms, pausa, cancelamento, bloqueio de arrasto, exclusividade e desconexão. Navegador isolado verificou arrombar cinza, salto oculto com destreza 1, custos numéricos 1/2 com destreza 2, progresso de 50%, cancelamento por mouse/teclado, pausa, token pressionado, destino indisponível cinza sem envio de comando e pulso de conclusão também para observador, sem erros JavaScript na página limpa. Serviços da partida preservados, sem publicação; aceite físico pendente. Próxima etapa: validar tokens, casa, portas e janelas no tablet. |
 | 2026-11-03 | Token base reduzido de 64 para 40 px, sem ícones internos, com borda e nome centralizado com contorno; miniatura fixa de 40 px e geometria/área de toque compartilhadas. Ações contextuais da porta no painel do jogador: abrir/fechar em 1 turno, trancar/destrancar somente por dentro em 1 turno e arrombar somente porta trancada em 2 turnos com força 3, permanecendo aberta. Pressão contínua com progresso no fundo do botão, cancelamento identificado por porta/ação, pausa congelando o tempo e pulso visual na porta ao concluir. Mantidos os módulos de sete hexágonos; futura arte cobrirá a grade, alinhada às bordas reais de portas/janelas. | `npm test` (23 contratos, 20 servidor, 5 jogo), `npm run typecheck`, `npm run build`, `npm run compose -- config --quiet`, integração no PostgreSQL isolado (`npm run compose -- --profile test run --build --rm integration`, 2 testes incluindo ações via Socket.IO) e `git diff --check` passaram. Testes cobrem cancelamento, tempo/pausa, lado/proximidade, força, exclusividade, posse, desconexão/saída e passagem após arrombar. Navegador isolado verificou miniatura 40 px, token 40→80 px com toque proporcional, ausência de ícones, nome central com contorno, custos numéricos 2/3, progresso de 50%, pressão por mouse/teclado, cancelamentos, independência de outro ponteiro/foco, pausa e pulso de conclusão; repetição em página limpa sem erros JavaScript. Banco de teste removido e servidor temporário encerrado; serviços da partida preservados, sem publicação. Próxima etapa: aceite no tablet dos tokens/casa/portas e depois salto de janela (ainda não implementado). |
 | 2026-11-03 | Painel central oculto ao iniciar o capítulo e durante a partida; retorna na pausa. Apresentação breve do capítulo e avisos de erro/conexão preservados sem título/prévia durante o jogo. | `npm run typecheck -w @terror/game` e `npm run build -w @terror/game` passaram. Navegador isolado com Socket.IO simulado verificou preparação, contagem, capítulo sem painel, partida sem painel, pausa/contagem de retomada, retomada, erro explícito e desconexão/reconexão. Servidor da partida preservado, sem publicação; aceite físico pendente. Próxima etapa permanece conferir a casa no tablet e implementar ações de porta/janela. |

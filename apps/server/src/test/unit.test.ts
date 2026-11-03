@@ -279,11 +279,13 @@ test("window jumps require dexterity 2 and a valid destination, not merely knowl
     assert.equal(goTo(connected.target), true);
     const options = snapshot().doorActions.filter(({ slot, action }) => slot === 0 && action === "jump-window");
     assert.equal(options.some(({ q, r, direction }) =>
-      q === connected.target.q && r === connected.target.r && direction === connected.target.direction), dexterity >= 2);
+      q === connected.target.q && r === connected.target.r && direction === connected.target.direction), true);
     if (dexterity === 1) {
-      assert.equal(match.command("tablet", {
+      assert.deepEqual(match.command("tablet", {
         type: "door-action", slot: 0, target: connected.target, action: "jump-window",
-      }).ok, false);
+      }), { ok: false, error: "Pular a janela exige destreza 2." });
+      game.advance(2000);
+      assert.deepEqual(game.location(), { q: connected.target.q, r: connected.target.r });
     } else {
       game.jump();
       game.advance(2000);
@@ -298,8 +300,7 @@ test("window jumps require dexterity 2 and a valid destination, not merely knowl
     const outwardOption = snapshot().doorActions.find(({ action, slot, q, r, direction }) =>
       slot === 0 && action === "jump-window" && q === outward.target.q
       && r === outward.target.r && direction === outward.target.direction);
-    if (dexterity >= 2) assert.equal(outwardOption?.available, false);
-    else assert.equal(outwardOption, undefined);
+    assert.equal(outwardOption?.available, false);
     const position = snapshot().players[0]!.position;
     assert.equal(match.command("tablet", {
       type: "door-action", slot: 0, target: outward.target, action: "jump-window",

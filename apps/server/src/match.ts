@@ -117,7 +117,6 @@ export class Match {
       const outside = position.q === cell.q + offset.q && position.r === cell.r + offset.r;
       if (!inside && !outside) return [];
       if (gate === "window") {
-        if (player.attributes.dexterity < DOOR_ACTION_RULES["jump-window"].dexterity) return [];
         return [{
           slot: player.slot, q: cell.q, r: cell.r, direction, action: "jump-window",
           available: this.#windowDestination(player, cell.q, cell.r, direction) !== undefined,

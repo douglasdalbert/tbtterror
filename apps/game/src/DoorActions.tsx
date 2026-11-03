@@ -14,7 +14,7 @@ export function DoorActions({ options, active, simulationTurns, strength, dexter
   onCommand: (command: MatchCommand) => void;
 }) {
   return <div className="door-actions" aria-label="Ações de portas e janelas">
-    {options.filter((option) => option.action !== "jump-window" || dexterity >= DOOR_ACTION_RULES["jump-window"].dexterity).map((option) => {
+    {options.map((option) => {
       const rule = DOOR_ACTION_RULES[option.action];
       const selected = active?.action === option.action && active.q === option.q && active.r === option.r
         && active.direction === option.direction;
